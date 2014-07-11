@@ -92,7 +92,7 @@ public class NodeShardCacheTest {
 //         * Simulate returning no shards at all.
 //         */
 //        when( allocation
-//                .getShards( same( scope ), same( id ), same( max), same( edgeType ),
+//                .getSourceShards( same( scope ), same( id ), same( max), same( edgeType ),
 //                        same( otherIdType ) ) )
 //                .thenReturn( Collections.singletonList( 0l ).iterator() );
 //
@@ -139,7 +139,7 @@ public class NodeShardCacheTest {
 //        /**
 //         * Simulate returning single shard
 //         */
-//        when( allocation.getShards( same( scope ), same( id ), same(max),
+//        when( allocation.getSourceShards( same( scope ), same( id ), same(max),
 //                same( edgeType ), same( otherIdType ) ) ).thenReturn( Collections.singletonList( min ).iterator() );
 //
 //
@@ -188,7 +188,7 @@ public class NodeShardCacheTest {
 //        /**
 //         * Simulate returning all shards
 //         */
-//        when( allocation.getShards( same( scope ), same( id ), any( Optional.class ),
+//        when( allocation.getSourceShards( same( scope ), same( id ), any( Optional.class ),
 //                same( edgeType ), same( otherIdType ) ) ).thenReturn( Arrays.asList( min, mid, max ).iterator() );
 //
 //
@@ -284,14 +284,14 @@ public class NodeShardCacheTest {
 //        /**
 //         * Simulate returning all shards
 //         */
-//        when( allocation.getShards( same( scope ), same( id ),  any(Optional.class),
+//        when( allocation.getSourceShards( same( scope ), same( id ),  any(Optional.class),
 //                same( edgeType ), same( otherIdType ) ) ).thenReturn( Arrays.asList( min, mid, max ).iterator() );
 //
 //
 //        //check getting equal to our min, mid and max
 //
 //        Iterator<Long> slice =
-//                cache.getShards( scope, id, max, edgeType, otherIdType );
+//                cache.getSourceShards( scope, id, max, edgeType, otherIdType );
 //
 //
 //        assertEquals( max, slice.next().longValue() );
@@ -299,13 +299,13 @@ public class NodeShardCacheTest {
 //        assertEquals( min, slice.next().longValue() );
 //
 //
-//        slice = cache.getShards( scope, id, mid, edgeType, otherIdType );
+//        slice = cache.getSourceShards( scope, id, mid, edgeType, otherIdType );
 //
 //        assertEquals( mid, slice.next().longValue() );
 //        assertEquals( min, slice.next().longValue() );
 //
 //
-//        slice = cache.getShards( scope, id, min, edgeType, otherIdType );
+//        slice = cache.getSourceShards( scope, id, min, edgeType, otherIdType );
 //
 //        assertEquals( min, slice.next().longValue() );
 //

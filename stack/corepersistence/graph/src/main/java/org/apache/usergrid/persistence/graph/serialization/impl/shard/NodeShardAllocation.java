@@ -36,16 +36,17 @@ public interface NodeShardAllocation {
 
 
     /**
-     * Get all shards for the given info.  If none exist, a default shard should be allocated
+     * Get all shards for the given info.  If none exist, a default shard should be allocated.  The nodeId is the source node
      *
      * @param scope The application scope
      * @param nodeId
+     * @param nodeType
      * @param maxShardId The max value to start seeking from.  Values <= this will be returned if specified
      * @param edgeTypes
      * @return A list of all shards <= the current shard.  This will always return 0l if no shards are allocated
      */
-    public Iterator<Shard> getShards( final ApplicationScope scope, final Id nodeId, Optional<Shard> maxShardId,
-                                     final String... edgeTypes );
+    public Iterator<Shard> getShards( final ApplicationScope scope, final Id nodeId, final NodeType nodeType, Optional<Shard> maxShardId,
+                                            final String... edgeTypes );
 
 
     /**
@@ -53,10 +54,17 @@ public interface NodeShardAllocation {
      *
      * @param scope The app scope
      * @param nodeId The node id
+     * @param nodeType The type of node
      * @param edgeType The edge types
      * @return True if a new shard was allocated
      */
-    public boolean auditMaxShard(final ApplicationScope scope, final Id nodeId, final String... edgeType);
+    public boolean auditMaxShard(final ApplicationScope scope, final Id nodeId,final NodeType nodeType,  final String... edgeType);
+
+    /**
+     * Get the minimum time that a created shard should be considered "new", and be used for both new writes and reads
+     * @return
+     */
+    public long getMinTime();
 
 
 }

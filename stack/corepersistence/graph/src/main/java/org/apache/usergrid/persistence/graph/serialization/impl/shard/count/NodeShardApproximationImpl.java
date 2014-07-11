@@ -29,6 +29,7 @@ import org.apache.usergrid.persistence.core.hystrix.HystrixCassandra;
 import org.apache.usergrid.persistence.core.scope.ApplicationScope;
 import org.apache.usergrid.persistence.graph.GraphFig;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeShardApproximation;
+import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeType;
 import org.apache.usergrid.persistence.model.entity.Id;
 
 import com.netflix.astyanax.MutationBatch;
@@ -81,7 +82,7 @@ public class NodeShardApproximationImpl implements NodeShardApproximation {
 
 
     @Override
-    public void increment( final ApplicationScope scope, final Id nodeId, final long shardId, final long count,
+    public void increment( final ApplicationScope scope, final Id nodeId,  final NodeType nodeType, final long shardId, final long count,
                            final String... edgeType ) {
 
 
@@ -102,7 +103,7 @@ public class NodeShardApproximationImpl implements NodeShardApproximation {
 
 
     @Override
-    public long getCount( final ApplicationScope scope, final Id nodeId, final long shardId,
+    public long getCount( final ApplicationScope scope, final Id nodeId,  final NodeType nodeType, final long shardId,
                           final String... edgeType ) {
 
         final ShardKey key = new ShardKey( scope, nodeId, shardId, edgeType );

@@ -37,21 +37,23 @@ public interface NodeShardCache {
     /**
      * Get the shard for the given timestamp
      * @param nodeId
+     * @param nodeType
      * @param timestamp The time to select the slice for.
      * @param edgeType
      */
-    public ShardEntries getWriteShards( final ApplicationScope scope, final Id nodeId, final long timestamp,
+    public ShardEntries getWriteShards( final ApplicationScope scope, final Id nodeId, NodeType nodeType, final long timestamp,
                                 final String... edgeType );
 
     /**
      * Get an iterator of all versions <= the version for iterating shard entry sets
      * @param scope
      * @param nodeId
+     * @para nodeType
      * @param maxTimestamp The highest timestamp
      * @param edgeType
      * @return
      */
-    public Iterator<ShardEntries> getReadShards( final ApplicationScope scope, final Id nodeId, final long maxTimestamp,
+    public Iterator<ShardEntries> getReadShards( final ApplicationScope scope, final Id nodeId, NodeType nodeType, final long maxTimestamp,
                                      final String... edgeType );
 
 }

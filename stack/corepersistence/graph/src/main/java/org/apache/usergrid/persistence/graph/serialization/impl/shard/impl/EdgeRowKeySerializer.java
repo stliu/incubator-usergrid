@@ -22,6 +22,7 @@ package org.apache.usergrid.persistence.graph.serialization.impl.shard.impl;
 import org.apache.usergrid.persistence.core.astyanax.CompositeFieldSerializer;
 import org.apache.usergrid.persistence.core.astyanax.IdRowCompositeSerializer;
 import org.apache.usergrid.persistence.model.entity.Id;
+import org.apache.usergrid.persistence.model.entity.SimpleId;
 
 import com.netflix.astyanax.model.CompositeBuilder;
 import com.netflix.astyanax.model.CompositeParser;
@@ -32,6 +33,8 @@ import com.netflix.astyanax.model.CompositeParser;
  */
 public class EdgeRowKeySerializer implements CompositeFieldSerializer<EdgeRowKey> {
 
+    private static final EdgeRowKeySerializer INSTANCE = new EdgeRowKeySerializer();
+
     private static final IdRowCompositeSerializer ID_SER = IdRowCompositeSerializer.get();
 
 
@@ -39,10 +42,13 @@ public class EdgeRowKeySerializer implements CompositeFieldSerializer<EdgeRowKey
     public void toComposite( final CompositeBuilder builder, final EdgeRowKey key ) {
 
         //add the row id to the composite
-        ID_SER.toComposite( builder, key.targetId );
+        ID_SER.toComposite( builder, key.nodeId );
 
-        builder.addLong( key.edgeTypesHash[0] );
-        builder.addLong( key.edgeTypesHash[1] );
+        builder.addInteger( key.edgeTypes.length );
+
+        for(String type: key.edgeTypes){
+            builder.addString( type );
+        }
     }
 
 
@@ -51,8 +57,25 @@ public class EdgeRowKeySerializer implements CompositeFieldSerializer<EdgeRowKey
 
         final Id sourceId = ID_SER.fromComposite( composite );
 
-        final long[] hash = { composite.readLong(), composite.readLong() };
 
-        return new EdgeRowKey( sourceId, hash );
+        final int length = composite.readInteger();
+
+        String[] types = new String[length];
+
+        for(int i = 0; i < length; i++){
+            types[i] = composite.readString();
+        }
+
+        return new EdgeRowKey( sourceId, types );
+
+    }
+
+
+
+    /**
+     * Get the singleton serializer
+     */
+    public static EdgeRowKeySerializer get() {
+        return INSTANCE;
     }
 }

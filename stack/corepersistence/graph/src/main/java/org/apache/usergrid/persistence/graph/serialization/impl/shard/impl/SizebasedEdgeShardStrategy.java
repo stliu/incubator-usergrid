@@ -26,6 +26,7 @@ import org.apache.usergrid.persistence.core.scope.ApplicationScope;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.EdgeShardStrategy;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeShardApproximation;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeShardCache;
+import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeType;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.ShardEntries;
 import org.apache.usergrid.persistence.model.entity.Id;
 
@@ -53,23 +54,23 @@ public class SizebasedEdgeShardStrategy implements EdgeShardStrategy {
 
 
     @Override
-    public ShardEntries getWriteShards( final ApplicationScope scope, final Id rowKeyId, final long timestamp,
+    public ShardEntries getWriteShards( final ApplicationScope scope, final Id rowKeyId,  final NodeType nodeType, final long timestamp,
                                 final String... types ) {
-        return shardCache.getWriteShards( scope, rowKeyId, timestamp, types );
+        return shardCache.getWriteShards( scope, rowKeyId, nodeType, timestamp, types );
     }
 
 
     @Override
-    public Iterator<ShardEntries> getReadShards( final ApplicationScope scope, final Id rowKeyId, final long maxTimestamp,
+    public Iterator<ShardEntries> getReadShards( final ApplicationScope scope, final Id rowKeyId,   final NodeType nodeType,final long maxTimestamp,
                                          final String... types ) {
-        return shardCache.getReadShards( scope, rowKeyId, maxTimestamp, types );
+        return shardCache.getReadShards( scope, rowKeyId, nodeType, maxTimestamp, types );
     }
 
 
     @Override
-    public void increment( final ApplicationScope scope, final Id rowKeyId, final long shardId, final long count,
+    public void increment( final ApplicationScope scope, final Id rowKeyId,  final NodeType nodeType, final long shardId, final long count,
                            final String... types ) {
-        shardApproximation.increment( scope, rowKeyId, shardId, count, types );
+        shardApproximation.increment( scope, rowKeyId, nodeType, shardId, count, types );
     }
 
 

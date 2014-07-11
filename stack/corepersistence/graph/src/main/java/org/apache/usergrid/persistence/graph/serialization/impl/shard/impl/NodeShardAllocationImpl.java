@@ -21,6 +21,8 @@ package org.apache.usergrid.persistence.graph.serialization.impl.shard.impl;
 
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 
@@ -33,9 +35,8 @@ import org.apache.usergrid.persistence.graph.exception.GraphRuntimeException;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.EdgeShardSerialization;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeShardAllocation;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeShardApproximation;
+import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeType;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.Shard;
-import org.apache.usergrid.persistence.graph.serialization.impl.shard.count.NodeShardCounterSerialization;
-import org.apache.usergrid.persistence.graph.serialization.impl.shard.count.ShardKey;
 import org.apache.usergrid.persistence.model.entity.Id;
 
 import com.google.common.base.Optional;
@@ -51,84 +52,92 @@ import com.netflix.astyanax.connectionpool.exceptions.ConnectionException;
 public class NodeShardAllocationImpl implements NodeShardAllocation {
 
 
+    private static final MinShardTimeComparator MIN_SHARD_TIME_COMPARATOR = new MinShardTimeComparator();
+
     private final EdgeShardSerialization edgeShardSerialization;
 //    private final NodeShardCounterSerialization edgeShardCounterSerialization;
     private final NodeShardApproximation nodeShardApproximation;
     private final TimeService timeService;
     private final GraphFig graphFig;
-
+    private final Keyspace keyspace;
 
     @Inject
     public NodeShardAllocationImpl( final EdgeShardSerialization edgeShardSerialization,
-                                    final NodeShardApproximation nodeShardApproximation,
-                                    final TimeService timeService, final GraphFig graphFig ) {
+                                    final NodeShardApproximation nodeShardApproximation, final TimeService timeService,
+                                    final GraphFig graphFig, final Keyspace keyspace ) {
         this.edgeShardSerialization = edgeShardSerialization;
         this.nodeShardApproximation = nodeShardApproximation;
         this.timeService = timeService;
         this.graphFig = graphFig;
+        this.keyspace = keyspace;
     }
 
 
     @Override
-    public Iterator<Shard> getShards( final ApplicationScope scope, final Id nodeId, Optional<Shard> maxShardId, final String... edgeTypes ) {
+    public Iterator<Shard> getShards( final ApplicationScope scope, final Id nodeId, final NodeType nodeType, final Optional<Shard> maxShardId,
+                                            final String... edgeTypes ) {
 
         final Iterator<Shard> existingShards =
-                edgeShardSerialization.getEdgeMetaData( scope, nodeId, maxShardId, edgeTypes );
+                edgeShardSerialization.getEdgeMetaData( scope, nodeId,nodeType, maxShardId, edgeTypes );
 
         final PushbackIterator<Shard> pushbackIterator = new PushbackIterator( existingShards );
-//
-//
-//        final long now = timeService.getCurrentTime();
-//
-//
-//        final List<Long> futures = new ArrayList<Long>();
-//
-//
-//        //loop through all shards, any shard > now+1 should be deleted
-//        while ( pushbackIterator.hasNext() ) {
-//
-//            final Long value = pushbackIterator.next();
-//
-//            //we're done, our current time uuid is greater than the value stored
-//            if ( now >= value ) {
-//                //push it back into the iterator
-//                pushbackIterator.pushback( value );
-//                break;
-//            }
-//
-//            futures.add( value );
-//        }
-//
-//
-//        //we have more than 1 future value, we need to remove it
-//
-//        MutationBatch cleanup = keyspace.prepareMutationBatch();
-//
-//        //remove all futures except the last one, it is the only value we shouldn't lazy remove
-//        for ( int i = 0; i < futures.size() -1; i++ ) {
-//            final long toRemove = futures.get( i );
-//
-//            final MutationBatch batch = edgeShardSerialization.removeEdgeMeta( scope, nodeId, toRemove, edgeTypes );
-//
-//            cleanup.mergeShallow( batch );
-//        }
-//
-//
-//        try {
-//            cleanup.execute();
-//        }
-//        catch ( ConnectionException e ) {
-//            throw new GraphRuntimeException( "Unable to remove future shards, mutation error", e );
-//        }
-//
-//
-//        final int futuresSize =  futures.size();
-//
-//        if ( futuresSize > 0 ) {
-//            pushbackIterator.pushback( futures.get( futuresSize - 1 ) );
-//        }
-//
-//
+
+
+        final long minConflictTime = getMinTime();
+
+
+        final List<Shard> futures = new ArrayList<>();
+
+
+        //loop through all shards, any shard > now+1 should be deleted
+        while ( pushbackIterator.hasNext() ) {
+
+            final Shard shard = pushbackIterator.next();
+
+            //we're done, our current time uuid is greater than the value stored
+            if ( shard.getCreatedTime() < minConflictTime  ) {
+                //push it back into the iterator
+                pushbackIterator.pushback( shard );
+                break;
+            }
+
+            futures.add( shard );
+        }
+
+
+        //clean up our future
+        Collections.sort(futures, MIN_SHARD_TIME_COMPARATOR);
+
+
+        //we have more than 1 future value, we need to remove it
+
+        MutationBatch cleanup = keyspace.prepareMutationBatch();
+
+        //remove all futures except the last one, it is the only value we shouldn't lazy remove
+        for ( int i = 1; i < futures.size() ; i++ ) {
+            final Shard toRemove = futures.get( i );
+
+            final MutationBatch batch = edgeShardSerialization.removeEdgeMeta( scope, nodeId, nodeType, toRemove.getShardIndex(), edgeTypes );
+
+            cleanup.mergeShallow( batch );
+        }
+
+
+        try {
+            cleanup.execute();
+        }
+        catch ( ConnectionException e ) {
+            throw new GraphRuntimeException( "Unable to remove future shards, mutation error", e );
+        }
+
+
+        final int futuresSize =  futures.size();
+
+        if ( futuresSize > 0 ) {
+            pushbackIterator.pushback( futures.get( 0 ) );
+        }
+
+
         /**
          * Nothing to iterate, return an iterator with 0.
          */
@@ -141,9 +150,9 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
 
 
     @Override
-    public boolean auditMaxShard( final ApplicationScope scope, final Id nodeId, final String... edgeType ) {
+    public boolean auditMaxShard( final ApplicationScope scope, final Id nodeId,final NodeType nodeType,  final String... edgeType ) {
 
-        final Iterator<Shard> maxShards = getShards( scope, nodeId, Optional.<Shard>absent(), edgeType );
+        final Iterator<Shard> maxShards = getShards( scope, nodeId, nodeType, Optional.<Shard>absent(), edgeType );
 
 
         //if the first shard has already been allocated, do nothing.
@@ -160,7 +169,7 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
          */
 
 
-        final long count = nodeShardApproximation.getCount( scope, nodeId, maxShard.getShardIndex(), edgeType );
+        final long count = nodeShardApproximation.getCount( scope, nodeId, nodeType,  maxShard.getShardIndex(), edgeType );
 
         if ( count < graphFig.getShardSize() ) {
             return false;
@@ -168,18 +177,42 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
 
         //try to get a lock here, and fail if one isn't present
 
-        final long newShardTime = timeService.getCurrentTime() + graphFig.getShardCacheTimeout() * 2;
-
-
-        try {
-            this.edgeShardSerialization.writeEdgeMeta( scope, nodeId, newShardTime, edgeType ).execute();
-        }
-        catch ( ConnectionException e ) {
-            throw new GraphRuntimeException( "Unable to write the new edge metadata" );
-        }
+//        final long newShardTime = timeService.getCurrentTime() + graphFig.getShardCacheTimeout() * 2;
+//
+//
+//        try {
+//            this.edgeShardSerialization.writeEdgeMeta( scope, nodeId, newShardTime, edgeType ).execute();
+//        }
+//        catch ( ConnectionException e ) {
+//            throw new GraphRuntimeException( "Unable to write the new edge metadata" );
+//        }
 
 
         return true;
     }
+
+
+    @Override
+    public long getMinTime() {
+        return timeService.getCurrentTime() - (2 * graphFig.getShardCacheTimeout());
+    }
+
+
+    /**
+     * Sorts by minimum time first.  If 2 times are equal, the min shard value is taken
+     */
+    private static final class MinShardTimeComparator implements Comparator<Shard> {
+
+            @Override
+            public int compare( final Shard s1, final Shard s2 ) {
+                int result =  Long.compare( s1.getCreatedTime(), s2.getCreatedTime() );
+
+                if(result == 0){
+                    result = Long.compare( s1.getShardIndex(), s2.getShardIndex() );
+                }
+
+                return result;
+            }
+        }
 
 }

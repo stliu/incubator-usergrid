@@ -25,7 +25,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.TreeSet;
-import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
@@ -34,6 +33,7 @@ import org.apache.usergrid.persistence.graph.GraphFig;
 import org.apache.usergrid.persistence.graph.exception.GraphRuntimeException;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeShardAllocation;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeShardCache;
+import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeType;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.Shard;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.ShardEntries;
 import org.apache.usergrid.persistence.graph.serialization.util.IterableUtil;
@@ -95,11 +95,11 @@ public class NodeShardCacheImpl implements NodeShardCache {
 
 
     @Override
-    public ShardEntries getWriteShards( final ApplicationScope scope, final Id nodeId, final long timestamp,
+    public ShardEntries getWriteShards( final ApplicationScope scope, final Id nodeId, final NodeType nodeType, final long timestamp,
                                final String... edgeType ) {
 
 
-        final CacheKey key = new CacheKey( scope, nodeId, edgeType );
+        final CacheKey key = new CacheKey( scope, nodeId, nodeType, edgeType );
         CacheEntry entry;
 
         try {
@@ -121,9 +121,9 @@ public class NodeShardCacheImpl implements NodeShardCache {
 
 
     @Override
-    public Iterator<ShardEntries> getReadShards( final ApplicationScope scope, final Id nodeId, final long maxTimestamp,
+    public Iterator<ShardEntries> getReadShards( final ApplicationScope scope, final Id nodeId, final NodeType nodeType, final long maxTimestamp,
                                      final String... edgeType ) {
-        final CacheKey key = new CacheKey( scope, nodeId, edgeType );
+        final CacheKey key = new CacheKey( scope, nodeId, nodeType, edgeType );
               CacheEntry entry;
 
               try {
@@ -165,7 +165,7 @@ public class NodeShardCacheImpl implements NodeShardCache {
 
 
                           final Iterator<Shard> edges = nodeShardAllocation
-                                  .getShards( key.scope, key.id, Optional.<Shard>absent(), key.types );
+                                  .getShards( key.scope, key.id, key.nodeType,  Optional.<Shard>absent(), key.types );
 
                           return new CacheEntry( edges );
                       }
@@ -179,12 +179,14 @@ public class NodeShardCacheImpl implements NodeShardCache {
     private static class CacheKey {
         private final ApplicationScope scope;
         private final Id id;
+        private final NodeType nodeType;
         private final String[] types;
 
 
-        private CacheKey( final ApplicationScope scope, final Id id, final String[] types ) {
+        private CacheKey( final ApplicationScope scope, final Id id, final NodeType nodeType, final String[] types ) {
             this.scope = scope;
             this.id = id;
+            this.nodeType = nodeType;
             this.types = types;
         }
 
@@ -203,6 +205,12 @@ public class NodeShardCacheImpl implements NodeShardCache {
             if ( !id.equals( cacheKey.id ) ) {
                 return false;
             }
+            if ( nodeType != cacheKey.nodeType ) {
+                return false;
+            }
+            if ( !scope.equals( cacheKey.scope ) ) {
+                return false;
+            }
             if ( !Arrays.equals( types, cacheKey.types ) ) {
                 return false;
             }
@@ -213,7 +221,9 @@ public class NodeShardCacheImpl implements NodeShardCache {
 
         @Override
         public int hashCode() {
-            int result = id.hashCode();
+            int result = scope.hashCode();
+            result = 31 * result + id.hashCode();
+            result = 31 * result + nodeType.hashCode();
             result = 31 * result + Arrays.hashCode( types );
             return result;
         }

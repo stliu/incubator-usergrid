@@ -77,6 +77,37 @@ public class NodeShardAllocationTest {
     }
 
 
+
+    @Test
+    public void minTime() {
+        final EdgeShardSerialization edgeShardSerialization = mock( EdgeShardSerialization.class );
+
+        final NodeShardApproximation nodeShardCounterSerialization =
+                mock( NodeShardApproximation.class );
+
+
+        final TimeService timeService = mock( TimeService.class );
+
+        final Keyspace keyspace = mock( Keyspace.class );
+
+
+        NodeShardAllocation approximation =
+                new NodeShardAllocationImpl( edgeShardSerialization, nodeShardCounterSerialization, timeService,
+                        graphFig, keyspace );
+
+
+        final long timeservicetime = System.currentTimeMillis();
+
+        when( timeService.getCurrentTime() ).thenReturn( timeservicetime );
+
+        final long expected = timeservicetime - 2 * graphFig.getShardCacheTimeout();
+
+        final long returned = approximation.getMinTime();
+
+        assertEquals("Correct time was returned", expected, returned);
+    }
+
+
     @Test
     public void noShards() {
         final EdgeShardSerialization edgeShardSerialization = mock( EdgeShardSerialization.class );
@@ -95,7 +126,7 @@ public class NodeShardAllocationTest {
 
         NodeShardAllocation approximation =
                 new NodeShardAllocationImpl( edgeShardSerialization, nodeShardCounterSerialization, timeService,
-                        graphFig );
+                        graphFig, keyspace );
 
         final Id nodeId = createId( "test" );
         final String type = "type";
@@ -115,7 +146,7 @@ public class NodeShardAllocationTest {
 
 
     @Test
-    public void existingFutureShard() {
+    public void existingFutureShardSameTime() {
         final EdgeShardSerialization edgeShardSerialization = mock( EdgeShardSerialization.class );
 
         final NodeShardApproximation nodeShardCounterSerialization =
@@ -134,7 +165,7 @@ public class NodeShardAllocationTest {
 
         NodeShardAllocation approximation =
                 new NodeShardAllocationImpl( edgeShardSerialization, nodeShardCounterSerialization, timeService,
-                        graphFig );
+                        graphFig, keyspace );
 
         final Id nodeId = createId( "test" );
         final String type = "type";
@@ -145,7 +176,7 @@ public class NodeShardAllocationTest {
 
         when( timeService.getCurrentTime() ).thenReturn( timeservicetime );
 
-        final Shard futureShard =  new Shard(timeservicetime + graphFig.getShardCacheTimeout() * 2, timeservicetime) ;
+        final Shard futureShard =  new Shard(10000l, timeservicetime) ;
 
         /**
          * Mock up returning a min shard, and a future shard
@@ -179,7 +210,7 @@ public class NodeShardAllocationTest {
 
         NodeShardAllocation approximation =
                 new NodeShardAllocationImpl( edgeShardSerialization, nodeShardApproximation, timeService,
-                        graphFig );
+                        graphFig, keyspace );
 
         final Id nodeId = createId( "test" );
         final String type = "type";
@@ -203,8 +234,7 @@ public class NodeShardAllocationTest {
 
         final long count = graphFig.getShardSize() - 1;
 
-        when( nodeShardApproximation.getCount(scope, nodeId, 0l, type, subType ))
-                                           .thenReturn( count );
+        when( nodeShardApproximation.getCount(scope, nodeId, 0l, type, subType )).thenReturn( count );
 
         final boolean result = approximation.auditMaxShard( scope, nodeId, type, subType );
 
@@ -231,7 +261,7 @@ public class NodeShardAllocationTest {
 
         NodeShardAllocation approximation =
                 new NodeShardAllocationImpl( edgeShardSerialization, nodeShardApproximation, timeService,
-                        graphFig );
+                        graphFig, keyspace );
 
         final Id nodeId = createId( "test" );
         final String type = "type";
@@ -258,12 +288,13 @@ public class NodeShardAllocationTest {
                 .getCount(   scope , nodeId, 0l,type , subType  ))
                 .thenReturn( shardCount );
 
-        ArgumentCaptor<Long> newUUIDValue = ArgumentCaptor.forClass( Long.class );
+        ArgumentCaptor<Long> shardValue = ArgumentCaptor.forClass( Long.class );
+        ArgumentCaptor<Long> timestampValue = ArgumentCaptor.forClass( Long.class );
 
 
         //mock up our mutation
         when( edgeShardSerialization
-                .writeEdgeMeta( same( scope ), same( nodeId ), newUUIDValue.capture(), same( type ), same( subType ) ) )
+                .writeEdgeMeta( same( scope ), same( nodeId ), shardValue.capture(), timestampValue.capture(), same( type ), same( subType ) ) )
                 .thenReturn( mock( MutationBatch.class ) );
 
 
@@ -273,13 +304,16 @@ public class NodeShardAllocationTest {
 
         //check our new allocated UUID
 
-        final long expectedTime = timeservicetime + 2 * graphFig.getShardCacheTimeout();
 
-        final long savedTimestamp = newUUIDValue.getValue();
-
+        final long savedTimestamp = timestampValue.getValue();
 
 
-        assertEquals( "Expected at 2x timeout generated", expectedTime, savedTimestamp );
+
+
+
+        assertEquals( "Expected time service time", timeservicetime, savedTimestamp );
+
+        //now check our max value was set
     }
 
 
@@ -304,7 +338,7 @@ public class NodeShardAllocationTest {
 
         NodeShardAllocation approximation =
                 new NodeShardAllocationImpl( edgeShardSerialization, nodeShardApproximation, timeService,
-                        graphFig );
+                        graphFig, keyspace );
 
         final Id nodeId = createId( "test" );
         final String type = "type";
@@ -333,14 +367,13 @@ public class NodeShardAllocationTest {
         /**
          * Simulate slow node
          */
-        final Shard futureShard1 = new Shard(futureTime - 1, timeservicetime);
+
+        //our second shard is the "oldest", and hence should be returned in the iterator.  Future shard 1 and 3 should be removed
+        final Shard futureShard1 = new Shard(futureTime - 1, timeservicetime+1000);
 
         final Shard futureShard2 = new Shard(futureTime + 10000, timeservicetime);
 
-        final Shard futureShard3 = new Shard(futureShard2.getShardIndex() + 10000, timeservicetime);
-
-
-        final int pageSize = 100;
+        final Shard futureShard3 = new Shard(futureShard2.getShardIndex() + 10000, timeservicetime+2000);
 
         /**
          * Mock up returning a min shard
@@ -363,12 +396,12 @@ public class NodeShardAllocationTest {
 
 
         final Iterator<Shard>
-                result = approximation.getShards( scope, nodeId, Optional.<Shard>absent(), type, subType );
+                result = approximation.getSourceShards( scope, nodeId, Optional.<Shard>absent(), type, subType );
 
 
         assertTrue( "Shards present", result.hasNext() );
 
-        assertEquals("Only single next shard returned", futureShard1,  result.next());
+        assertEquals("Only single next shard returned", futureShard2,  result.next());
 
         assertTrue("Shards present", result.hasNext());
 
@@ -384,8 +417,8 @@ public class NodeShardAllocationTest {
 
         assertEquals("2 values removed", 2,  values.size());
 
-        assertEquals("Deleted Max Future", futureShard3, values.get( 0 ).longValue());
-        assertEquals("Deleted Next Future", futureShard2, values.get( 1 ).longValue());
+        assertEquals("Deleted Max Future", futureShard1.getShardIndex(), values.get( 0 ).longValue());
+        assertEquals("Deleted Next Future", futureShard3.getShardIndex(), values.get( 1 ).longValue());
 
     }
 
@@ -410,7 +443,7 @@ public class NodeShardAllocationTest {
 
         NodeShardAllocation approximation =
                 new NodeShardAllocationImpl( edgeShardSerialization, nodeShardApproximation, timeService,
-                        graphFig );
+                        graphFig, keyspace );
 
         final Id nodeId = createId( "test" );
         final String type = "type";
@@ -423,7 +456,8 @@ public class NodeShardAllocationTest {
                 .getEdgeMetaData( same( scope ), same( nodeId ), any( Optional.class ),  same( type ),
                         same( subType ) ) ).thenReturn( Collections.<Shard>emptyList().iterator() );
 
-        final Iterator<Shard> result = approximation.getShards( scope, nodeId, Optional.<Shard>absent(), type, subType );
+        final Iterator<Shard> result = approximation.getSourceShards( scope, nodeId, Optional.<Shard>absent(), type,
+                subType );
 
         assertEquals("0 shard allocated", 0l, result.next().getShardIndex());
 

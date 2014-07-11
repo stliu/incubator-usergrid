@@ -92,33 +92,55 @@ public class EdgeShardSerializationTest {
 
         final long slice3 = slice2 * 2;
 
+        final long timestamp = 10000l;
+
         String[] types = { "edgeType", "subType" };
 
-        MutationBatch batch = edgeShardSerialization.writeEdgeMeta( scope, now, slice1, types );
+        MutationBatch batch = edgeShardSerialization.writeEdgeMeta( scope, now, slice1, timestamp, types );
 
-        batch.mergeShallow( edgeShardSerialization.writeEdgeMeta( scope, now, slice2, types ) );
+        batch.mergeShallow( edgeShardSerialization.writeEdgeMeta( scope, now, slice2, timestamp, types ) );
 
-        batch.mergeShallow( edgeShardSerialization.writeEdgeMeta( scope, now, slice3, types ) );
+        batch.mergeShallow( edgeShardSerialization.writeEdgeMeta( scope, now, slice3, timestamp, types ) );
 
         batch.execute();
 
 
         Iterator<Shard> results = edgeShardSerialization.getEdgeMetaData( scope, now, Optional.<Shard>absent(), types );
 
-        assertEquals( slice3, results.next().getShardIndex() );
+        Shard next = results.next();
 
-        assertEquals( slice2, results.next().getShardIndex() );
+        assertEquals( slice3, next.getShardIndex() );
 
-        assertEquals( slice1, results.next().getShardIndex() );
+        assertEquals( timestamp, next.getCreatedTime());
+
+        next = results.next();
+
+
+        assertEquals( slice2, next.getShardIndex() );
+
+        assertEquals( timestamp, next.getCreatedTime());
+
+        next = results.next();
+
+
+        assertEquals( slice1, next.getShardIndex() );
+
+        assertEquals( timestamp, next.getCreatedTime());
 
         assertFalse( results.hasNext() );
 
         //test paging and size
         results = edgeShardSerialization.getEdgeMetaData( scope, now, Optional.of( new Shard( slice2, 0l ) ), types );
 
-        assertEquals( slice2, results.next().getShardIndex() );
+        next = results.next();
 
-        assertEquals( slice1, results.next().getShardIndex() );
+        assertEquals( slice2, next.getShardIndex() );
+        assertEquals( timestamp, next.getCreatedTime());
+
+        next = results.next();
+
+        assertEquals( slice1, next.getShardIndex() );
+        assertEquals( timestamp, next.getCreatedTime());
 
 
         assertFalse( results.hasNext() );
@@ -136,13 +158,15 @@ public class EdgeShardSerializationTest {
 
         final long slice3 = slice2 * 2;
 
+        final long timestamp = 10000l;
+
         String[] types = { "edgeType", "subType" };
 
-        MutationBatch batch = edgeShardSerialization.writeEdgeMeta( scope, now, slice1, types );
+        MutationBatch batch = edgeShardSerialization.writeEdgeMeta( scope, now, slice1, timestamp, types );
 
-        batch.mergeShallow( edgeShardSerialization.writeEdgeMeta( scope, now, slice2, types ) );
+        batch.mergeShallow( edgeShardSerialization.writeEdgeMeta( scope, now, slice2, timestamp,types ) );
 
-        batch.mergeShallow( edgeShardSerialization.writeEdgeMeta( scope, now, slice3, types ) );
+        batch.mergeShallow( edgeShardSerialization.writeEdgeMeta( scope, now, slice3, timestamp, types ) );
 
         batch.execute();
 

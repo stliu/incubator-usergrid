@@ -100,4 +100,13 @@ public class Shard implements Comparable<Shard> {
         result = 31 * result + ( int ) ( createdTime ^ ( createdTime >>> 32 ) );
         return result;
     }
+
+
+    @Override
+    public String toString() {
+        return "Shard{" +
+                "shardIndex=" + shardIndex +
+                ", createdTime=" + createdTime +
+                "} ";
+    }
 }

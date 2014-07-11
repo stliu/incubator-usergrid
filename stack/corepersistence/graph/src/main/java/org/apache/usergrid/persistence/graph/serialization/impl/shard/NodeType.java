@@ -16,27 +16,14 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.usergrid.persistence.graph.serialization.impl.shard.impl;
-
-
-import org.apache.usergrid.persistence.model.entity.Id;
+package org.apache.usergrid.persistence.graph.serialization.impl.shard;
 
 
 /**
- * Used to store row keys by sourceId, targetId and edgeType
+ * The node type of the source or target
  */
-public class EdgeRowKey {
-    public final Id nodeId;
-    public final String[] edgeTypes;
-
-
-    public EdgeRowKey( final Id nodeId, final String[] edgeTypes ) {
-        this.nodeId = nodeId;
-        this.edgeTypes = edgeTypes;
-    }
-
+public enum NodeType {
+    SOURCE,
+    TARGET
 
 }
-
-
-
