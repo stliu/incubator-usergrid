@@ -55,6 +55,7 @@ import org.apache.usergrid.persistence.graph.SearchByIdType;
 import org.apache.usergrid.persistence.graph.impl.SimpleMarkedEdge;
 import org.apache.usergrid.persistence.graph.serialization.EdgeSerialization;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.EdgeShardStrategy;
+import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeType;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.Shard;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.ShardEntries;
 import org.apache.usergrid.persistence.graph.serialization.util.EdgeHasher;
@@ -211,9 +212,9 @@ public class EdgeSerializationImpl implements EdgeSerialization, Migration {
 
 
             @Override
-            public void countEdge( final Id rowId, final long shardId, final String... types ) {
+            public void countEdge( final Id rowId, final NodeType nodeType, final long shardId, final String... types ) {
                 if ( !isDeleted ) {
-                    edgeShardStrategy.increment( scope, rowId, shardId, 1l, types );
+                    edgeShardStrategy.increment( scope, rowId, nodeType, shardId, 1l, types );
                 }
             }
 
@@ -250,8 +251,8 @@ public class EdgeSerializationImpl implements EdgeSerialization, Migration {
 
 
             @Override
-            public void countEdge( final Id rowId, final long shardId, final String... types ) {
-                edgeShardStrategy.increment( scope, rowId, shardId, -1, types );
+            public void countEdge( final Id rowId, final NodeType nodeType,  final long shardId,  final String... types ) {
+                edgeShardStrategy.increment( scope, rowId, nodeType, shardId, -1, types );
             }
 
 
@@ -298,7 +299,7 @@ public class EdgeSerializationImpl implements EdgeSerialization, Migration {
 
         final DirectedEdge sourceEdge = new DirectedEdge( targetNodeId, timestamp );
 
-        final ShardEntries sourceRowKeyShard = edgeShardStrategy.getWriteShards( scope, sourceNodeId, timestamp, type );
+        final ShardEntries sourceRowKeyShard = edgeShardStrategy.getWriteShards( scope, sourceNodeId, NodeType.SOURCE, timestamp, type );
 
 
         for ( Shard shard : sourceRowKeyShard.getEntries() ) {
@@ -306,12 +307,12 @@ public class EdgeSerializationImpl implements EdgeSerialization, Migration {
             final long shardId = shard.getShardIndex();
             final RowKey sourceRowKey = new RowKey( sourceNodeId, type, shardId );
             op.writeEdge( sourceNodeEdgesCf, sourceRowKey, sourceEdge );
-            op.countEdge( sourceNodeId, shardId, type );
+            op.countEdge( sourceNodeId, NodeType.SOURCE, shardId, type );
         }
 
 
         final ShardEntries sourceWithTypeRowKeyShard =
-                edgeShardStrategy.getWriteShards( scope, sourceNodeId, timestamp, type, targetNodeType );
+                edgeShardStrategy.getWriteShards( scope, sourceNodeId, NodeType.SOURCE, timestamp, type, targetNodeType );
 
         for ( Shard shard : sourceWithTypeRowKeyShard.getEntries() ) {
 
@@ -319,7 +320,7 @@ public class EdgeSerializationImpl implements EdgeSerialization, Migration {
             final RowKeyType sourceRowKeyType = new RowKeyType( sourceNodeId, type, targetNodeId, shardId );
 
             op.writeEdge( sourceNodeTargetTypeCf, sourceRowKeyType, sourceEdge );
-            op.countEdge( sourceNodeId, shardId, type, targetNodeType );
+            op.countEdge( sourceNodeId, NodeType.SOURCE, shardId, type, targetNodeType );
         }
 
 
@@ -330,19 +331,19 @@ public class EdgeSerializationImpl implements EdgeSerialization, Migration {
         final DirectedEdge targetEdge = new DirectedEdge( sourceNodeId, timestamp );
 
 
-        final ShardEntries targetRowKeyShard = edgeShardStrategy.getWriteShards( scope, targetNodeId, timestamp, type );
+        final ShardEntries targetRowKeyShard = edgeShardStrategy.getWriteShards( scope, targetNodeId, NodeType.TARGET, timestamp, type );
 
         for ( Shard shard : targetRowKeyShard.getEntries() ) {
             final long shardId = shard.getShardIndex();
             final RowKey targetRowKey = new RowKey( targetNodeId, type, shardId );
 
             op.writeEdge( targetNodeEdgesCf, targetRowKey, targetEdge );
-            op.countEdge( targetNodeId, shardId, type );
+            op.countEdge( targetNodeId, NodeType.TARGET, shardId, type );
         }
 
 
         final ShardEntries targetWithTypeRowKeyShard =
-                edgeShardStrategy.getWriteShards( scope, targetNodeId, timestamp, type, souceNodeType );
+                edgeShardStrategy.getWriteShards( scope, targetNodeId, NodeType.TARGET, timestamp, type, souceNodeType );
 
 
         for ( Shard shard : targetWithTypeRowKeyShard.getEntries() ) {
@@ -353,7 +354,7 @@ public class EdgeSerializationImpl implements EdgeSerialization, Migration {
 
 
             op.writeEdge( targetNodeSourceTypeCf, targetRowKeyType, targetEdge );
-            op.countEdge( targetNodeId, shardId, type, souceNodeType );
+            op.countEdge( targetNodeId, NodeType.TARGET, shardId, type, souceNodeType );
         }
 
         /**
@@ -381,7 +382,7 @@ public class EdgeSerializationImpl implements EdgeSerialization, Migration {
 
         final EdgeSearcher<EdgeRowKey, Long, MarkedEdge> searcher =
                 new EdgeSearcher<EdgeRowKey, Long, MarkedEdge>( scope, maxTimestamp, search.last(),
-                        edgeShardStrategy.getReadShards( scope, sourceId, maxTimestamp, type ) ) {
+                        edgeShardStrategy.getReadShards( scope, sourceId, NodeType.SOURCE, maxTimestamp, type ) ) {
 
                     @Override
                     protected Serializer<Long> getSerializer() {
@@ -437,7 +438,7 @@ public class EdgeSerializationImpl implements EdgeSerialization, Migration {
 
         final EdgeSearcher<RowKey, DirectedEdge, MarkedEdge> searcher =
                 new EdgeSearcher<RowKey, DirectedEdge, MarkedEdge>( scope, maxTimestamp, edgeType.last(),
-                        edgeShardStrategy.getReadShards( scope, sourceId, maxTimestamp, type ) ) {
+                        edgeShardStrategy.getReadShards( scope, sourceId,NodeType.SOURCE, maxTimestamp, type ) ) {
 
 
                     @Override
@@ -482,7 +483,7 @@ public class EdgeSerializationImpl implements EdgeSerialization, Migration {
 
         final EdgeSearcher<RowKeyType, DirectedEdge, MarkedEdge> searcher =
                 new EdgeSearcher<RowKeyType, DirectedEdge, MarkedEdge>( scope, maxTimestamp, edgeType.last(),
-                        edgeShardStrategy.getReadShards( scope, targetId, maxTimestamp, type, targetType ) ) {
+                        edgeShardStrategy.getReadShards( scope, targetId, NodeType.TARGET, maxTimestamp, type, targetType ) ) {
 
                     @Override
                     protected Serializer<DirectedEdge> getSerializer() {
@@ -524,7 +525,7 @@ public class EdgeSerializationImpl implements EdgeSerialization, Migration {
 
         final EdgeSearcher<RowKey, DirectedEdge, MarkedEdge> searcher =
                 new EdgeSearcher<RowKey, DirectedEdge, MarkedEdge>( scope, maxTimestamp, edgeType.last(),
-                        edgeShardStrategy.getReadShards( scope, targetId, maxTimestamp, type ) ) {
+                        edgeShardStrategy.getReadShards( scope, targetId, NodeType.TARGET, maxTimestamp, type ) ) {
 
                     @Override
                     protected Serializer<DirectedEdge> getSerializer() {
@@ -570,7 +571,7 @@ public class EdgeSerializationImpl implements EdgeSerialization, Migration {
 
         final EdgeSearcher<RowKeyType, DirectedEdge, MarkedEdge> searcher =
                 new EdgeSearcher<RowKeyType, DirectedEdge, MarkedEdge>( scope, maxTimestamp, edgeType.last(),
-                        edgeShardStrategy.getReadShards( scope, targetId, maxTimestamp, type, sourceType ) ) {
+                        edgeShardStrategy.getReadShards( scope, targetId, NodeType.TARGET,  maxTimestamp, type, sourceType ) ) {
                     @Override
                     protected Serializer<DirectedEdge> getSerializer() {
                         return EDGE_SERIALIZER;
@@ -994,7 +995,7 @@ public class EdgeSerializationImpl implements EdgeSerialization, Migration {
         /**
          * Perform the count on the edge
          */
-        void countEdge( final Id rowId, long shardId, String... types );
+        void countEdge( final Id rowId, NodeType type, long shardId,  String... types );
 
         /**
          * Write the edge into the version cf

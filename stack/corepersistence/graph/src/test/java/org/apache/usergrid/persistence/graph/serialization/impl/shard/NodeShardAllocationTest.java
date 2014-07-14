@@ -44,6 +44,7 @@ import static org.apache.usergrid.persistence.graph.test.util.EdgeTestUtils.crea
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -136,13 +137,16 @@ public class NodeShardAllocationTest {
          * Mock up returning an empty iterator, our audit shouldn't create a new shard
          */
         when( edgeShardSerialization
-                .getEdgeMetaData( same( scope ), same( nodeId ), any( Optional.class ),  same( type ),
+                .getEdgeMetaData( same( scope ), same( nodeId ), eq( NodeType.SOURCE ), any( Optional.class ),  same( type ),
                         same( subType ) ) ).thenReturn( Collections.<Shard>emptyList().iterator() );
 
-        final boolean result = approximation.auditMaxShard( scope, nodeId, type, subType );
+        final boolean result = approximation.auditMaxShard( scope, nodeId, NodeType.SOURCE, type, subType );
 
         assertFalse( "No shard allocated", result );
     }
+
+
+
 
 
     @Test
@@ -182,10 +186,10 @@ public class NodeShardAllocationTest {
          * Mock up returning a min shard, and a future shard
          */
         when( edgeShardSerialization
-                .getEdgeMetaData( same( scope ), same( nodeId ), any( Optional.class ),  same( type ),
+                .getEdgeMetaData( same( scope ), same( nodeId ), eq( NodeType.TARGET), any( Optional.class ),  same( type ),
                         same( subType ) ) ).thenReturn( Arrays.asList( futureShard ).iterator() );
 
-        final boolean result = approximation.auditMaxShard( scope, nodeId, type, subType );
+        final boolean result = approximation.auditMaxShard( scope, nodeId, NodeType.TARGET,  type, subType );
 
         assertFalse( "No shard allocated", result );
     }
@@ -226,7 +230,7 @@ public class NodeShardAllocationTest {
          * Mock up returning a min shard, and a future shard
          */
         when( edgeShardSerialization
-                .getEdgeMetaData( same( scope ), same( nodeId ), any( Optional.class ),  same( type ),
+                .getEdgeMetaData( same( scope ), same( nodeId ), eq(NodeType.TARGET), any( Optional.class ),  same( type ),
                         same( subType ) ) ).thenReturn( Arrays.asList( new Shard(0l, 0l) ).iterator() );
 
 
@@ -234,9 +238,9 @@ public class NodeShardAllocationTest {
 
         final long count = graphFig.getShardSize() - 1;
 
-        when( nodeShardApproximation.getCount(scope, nodeId, 0l, type, subType )).thenReturn( count );
+        when( nodeShardApproximation.getCount(scope, nodeId, NodeType.TARGET, 0l, type, subType )).thenReturn( count );
 
-        final boolean result = approximation.auditMaxShard( scope, nodeId, type, subType );
+        final boolean result = approximation.auditMaxShard( scope, nodeId, NodeType.TARGET, type, subType );
 
         assertFalse( "Shard allocated", result );
     }
@@ -277,7 +281,7 @@ public class NodeShardAllocationTest {
          * Mock up returning a min shard
          */
         when( edgeShardSerialization
-                .getEdgeMetaData( same( scope ), same( nodeId ), any( Optional.class ),  same( type ),
+                .getEdgeMetaData( same( scope ), same( nodeId ), eq(NodeType.SOURCE), any( Optional.class ),  same( type ),
                         same( subType ) ) ).thenReturn( Arrays.asList( new Shard(0l, 0l) ).iterator() );
 
 
@@ -285,7 +289,7 @@ public class NodeShardAllocationTest {
 
         //return a shard size equal to our max
         when( nodeShardApproximation
-                .getCount(   scope , nodeId, 0l,type , subType  ))
+                .getCount(   scope , nodeId, NodeType.SOURCE, 0l,type , subType  ))
                 .thenReturn( shardCount );
 
         ArgumentCaptor<Long> shardValue = ArgumentCaptor.forClass( Long.class );
@@ -294,11 +298,11 @@ public class NodeShardAllocationTest {
 
         //mock up our mutation
         when( edgeShardSerialization
-                .writeEdgeMeta( same( scope ), same( nodeId ), shardValue.capture(), timestampValue.capture(), same( type ), same( subType ) ) )
+                .writeEdgeMeta( same( scope ), same( nodeId ), eq(NodeType.SOURCE), shardValue.capture(), timestampValue.capture(), same( type ), same( subType ) ) )
                 .thenReturn( mock( MutationBatch.class ) );
 
 
-        final boolean result = approximation.auditMaxShard( scope, nodeId, type, subType );
+        final boolean result = approximation.auditMaxShard( scope, nodeId, NodeType.SOURCE,  type, subType );
 
         assertTrue( "Shard allocated", result );
 
@@ -379,7 +383,7 @@ public class NodeShardAllocationTest {
          * Mock up returning a min shard
          */
         when( edgeShardSerialization
-                .getEdgeMetaData( same( scope ), same( nodeId ), any( Optional.class ), same( type ),
+                .getEdgeMetaData( same( scope ), same( nodeId ), eq(NodeType.TARGET), any( Optional.class ), same( type ),
                         same( subType ) ) ).thenReturn( Arrays.asList(futureShard3, futureShard2, futureShard1, minShard).iterator() );
 
 
@@ -391,12 +395,12 @@ public class NodeShardAllocationTest {
 
         //mock up our mutation
         when( edgeShardSerialization
-                .removeEdgeMeta( same( scope ), same( nodeId ), newLongValue.capture(), same( type ), same( subType ) ) )
+                .removeEdgeMeta( same( scope ), same( nodeId ), eq(NodeType.TARGET), newLongValue.capture(), same( type ), same( subType ) ) )
                 .thenReturn( mock( MutationBatch.class ) );
 
 
         final Iterator<Shard>
-                result = approximation.getSourceShards( scope, nodeId, Optional.<Shard>absent(), type, subType );
+                result = approximation.getShards( scope, nodeId, NodeType.TARGET, Optional.<Shard>absent(), type, subType );
 
 
         assertTrue( "Shards present", result.hasNext() );
@@ -453,10 +457,10 @@ public class NodeShardAllocationTest {
          * Mock up returning an empty iterator, our audit shouldn't create a new shard
          */
         when( edgeShardSerialization
-                .getEdgeMetaData( same( scope ), same( nodeId ), any( Optional.class ),  same( type ),
+                .getEdgeMetaData( same( scope ), same( nodeId ), eq(NodeType.TARGET), any( Optional.class ),  same( type ),
                         same( subType ) ) ).thenReturn( Collections.<Shard>emptyList().iterator() );
 
-        final Iterator<Shard> result = approximation.getSourceShards( scope, nodeId, Optional.<Shard>absent(), type,
+        final Iterator<Shard> result = approximation.getShards( scope, nodeId, NodeType.TARGET,  Optional.<Shard>absent(), type,
                 subType );
 
         assertEquals("0 shard allocated", 0l, result.next().getShardIndex());

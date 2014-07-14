@@ -41,9 +41,11 @@ public interface GraphFig extends GuicyFig {
 
     public static final String SHARD_CACHE_TIMEOUT = "usergrid.graph.shard.cache.timeout";
 
-    public static final String COUNTER_WRITE_FLUSH_COUNT = "usergrid.graph.shard.counter.flush.count";
+    public static final String COUNTER_WRITE_FLUSH_COUNT = "usergrid.graph.shard.counter.beginFlush.count";
 
-    public static final String COUNTER_WRITE_FLUSH_INTERVAL = "usergrid.graph.shard.counter.flush.interval";
+    public static final String COUNTER_WRITE_FLUSH_INTERVAL = "usergrid.graph.shard.counter.beginFlush.interval";
+
+    public static final String COUNTER_WRITE_FLUSH_QUEUE_SIZE = "usergrid.graph.shard.counter.queue.size";
 
 
 
@@ -82,5 +84,9 @@ public interface GraphFig extends GuicyFig {
     @Default( "30000" )
     @Key( COUNTER_WRITE_FLUSH_INTERVAL )
     long getCounterFlushInterval();
+
+    @Default( "1000" )
+    @Key(COUNTER_WRITE_FLUSH_QUEUE_SIZE  )
+    int getCounterFlushQueueSize();
 }
 

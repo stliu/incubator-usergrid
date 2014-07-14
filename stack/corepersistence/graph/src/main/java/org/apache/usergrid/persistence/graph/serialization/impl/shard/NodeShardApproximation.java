@@ -55,7 +55,14 @@ public interface NodeShardApproximation {
 
 
     /**
-     * Flush the current counters in the Approximation
+     * Flush the current counters in the Approximation.  Will return immediately after the flush. You can then use flushPending
+     * to check the state.
      */
-    public void flush();
+    public void beginFlush();
+
+    /**
+     * Return true if there is data to be flushed
+     * @return
+     */
+    public boolean flushPending();
 }

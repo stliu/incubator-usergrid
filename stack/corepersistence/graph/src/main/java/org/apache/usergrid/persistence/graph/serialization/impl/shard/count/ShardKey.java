@@ -22,6 +22,7 @@ package org.apache.usergrid.persistence.graph.serialization.impl.shard.count;
 import java.util.Arrays;
 
 import org.apache.usergrid.persistence.core.scope.ApplicationScope;
+import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeType;
 import org.apache.usergrid.persistence.model.entity.Id;
 
 
@@ -32,14 +33,43 @@ public class ShardKey {
     private final ApplicationScope scope;
     private final Id nodeId;
     private final long shardId;
+    private final NodeType nodeType;
     private final String[] edgeTypes;
 
 
-    public ShardKey( final ApplicationScope scope, final Id nodeId, final long shardId, final String... edgeTypes ) {
+    public ShardKey( final ApplicationScope scope, final Id nodeId, final NodeType nodeType, final long shardId, final String... edgeTypes ) {
         this.scope = scope;
         this.nodeId = nodeId;
         this.shardId = shardId;
         this.edgeTypes = edgeTypes;
+        this.nodeType = nodeType;
+    }
+
+
+
+
+    public ApplicationScope getScope() {
+        return scope;
+    }
+
+
+    public Id getNodeId() {
+        return nodeId;
+    }
+
+
+    public long getShardId() {
+        return shardId;
+    }
+
+
+    public String[] getEdgeTypes() {
+        return edgeTypes;
+    }
+
+
+    public NodeType getNodeType() {
+        return nodeType;
     }
 
 
@@ -63,6 +93,9 @@ public class ShardKey {
         if ( !nodeId.equals( shardKey.nodeId ) ) {
             return false;
         }
+        if ( nodeType != shardKey.nodeType ) {
+            return false;
+        }
         if ( !scope.equals( shardKey.scope ) ) {
             return false;
         }
@@ -71,31 +104,12 @@ public class ShardKey {
     }
 
 
-    public ApplicationScope getScope() {
-        return scope;
-    }
-
-
-    public Id getNodeId() {
-        return nodeId;
-    }
-
-
-    public long getShardId() {
-        return shardId;
-    }
-
-
-    public String[] getEdgeTypes() {
-        return edgeTypes;
-    }
-
-
     @Override
     public int hashCode() {
         int result = scope.hashCode();
         result = 31 * result + nodeId.hashCode();
         result = 31 * result + ( int ) ( shardId ^ ( shardId >>> 32 ) );
+        result = 31 * result + nodeType.hashCode();
         result = 31 * result + Arrays.hashCode( edgeTypes );
         return result;
     }

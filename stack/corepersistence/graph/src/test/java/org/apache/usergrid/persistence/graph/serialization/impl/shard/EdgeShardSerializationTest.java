@@ -96,16 +96,16 @@ public class EdgeShardSerializationTest {
 
         String[] types = { "edgeType", "subType" };
 
-        MutationBatch batch = edgeShardSerialization.writeEdgeMeta( scope, now, slice1, timestamp, types );
+        MutationBatch batch = edgeShardSerialization.writeEdgeMeta( scope, now, NodeType.SOURCE, slice1, timestamp, types );
 
-        batch.mergeShallow( edgeShardSerialization.writeEdgeMeta( scope, now, slice2, timestamp, types ) );
+        batch.mergeShallow( edgeShardSerialization.writeEdgeMeta( scope, now, NodeType.SOURCE, slice2, timestamp, types ) );
 
-        batch.mergeShallow( edgeShardSerialization.writeEdgeMeta( scope, now, slice3, timestamp, types ) );
+        batch.mergeShallow( edgeShardSerialization.writeEdgeMeta( scope, now, NodeType.SOURCE, slice3, timestamp, types ) );
 
         batch.execute();
 
 
-        Iterator<Shard> results = edgeShardSerialization.getEdgeMetaData( scope, now, Optional.<Shard>absent(), types );
+        Iterator<Shard> results = edgeShardSerialization.getEdgeMetaData( scope, now, NodeType.SOURCE, Optional.<Shard>absent(), types );
 
         Shard next = results.next();
 
@@ -129,8 +129,14 @@ public class EdgeShardSerializationTest {
 
         assertFalse( results.hasNext() );
 
+        //test we get nothing with the other node type
+        results = edgeShardSerialization.getEdgeMetaData( scope, now, NodeType.TARGET, Optional.<Shard>absent(), types );
+
+        assertFalse(results.hasNext());
+
+
         //test paging and size
-        results = edgeShardSerialization.getEdgeMetaData( scope, now, Optional.of( new Shard( slice2, 0l ) ), types );
+        results = edgeShardSerialization.getEdgeMetaData( scope, now, NodeType.SOURCE, Optional.of( new Shard( slice2, 0l ) ), types );
 
         next = results.next();
 
@@ -162,16 +168,16 @@ public class EdgeShardSerializationTest {
 
         String[] types = { "edgeType", "subType" };
 
-        MutationBatch batch = edgeShardSerialization.writeEdgeMeta( scope, now, slice1, timestamp, types );
+        MutationBatch batch = edgeShardSerialization.writeEdgeMeta( scope, now, NodeType.SOURCE, slice1, timestamp, types );
 
-        batch.mergeShallow( edgeShardSerialization.writeEdgeMeta( scope, now, slice2, timestamp,types ) );
+        batch.mergeShallow( edgeShardSerialization.writeEdgeMeta( scope, now, NodeType.SOURCE, slice2, timestamp,types ) );
 
-        batch.mergeShallow( edgeShardSerialization.writeEdgeMeta( scope, now, slice3, timestamp, types ) );
+        batch.mergeShallow( edgeShardSerialization.writeEdgeMeta( scope, now, NodeType.SOURCE, slice3, timestamp, types ) );
 
         batch.execute();
 
 
-        Iterator<Shard> results = edgeShardSerialization.getEdgeMetaData( scope, now, Optional.<Shard>absent(), types );
+        Iterator<Shard> results = edgeShardSerialization.getEdgeMetaData( scope, now, NodeType.SOURCE, Optional.<Shard>absent(), types );
 
         assertEquals( slice3, results.next().getShardIndex() );
 
@@ -181,10 +187,15 @@ public class EdgeShardSerializationTest {
 
         assertFalse( results.hasNext() );
 
-        //test paging and size
-        edgeShardSerialization.removeEdgeMeta( scope, now, slice1, types ).execute();
+        //test nothing with other type
+        results = edgeShardSerialization.getEdgeMetaData( scope, now, NodeType.TARGET, Optional.<Shard>absent(), types );
 
-        results = edgeShardSerialization.getEdgeMetaData( scope, now,Optional.<Shard>absent(), types );
+        assertFalse(results.hasNext());
+
+        //test paging and size
+        edgeShardSerialization.removeEdgeMeta( scope, now, NodeType.SOURCE, slice1, types ).execute();
+
+        results = edgeShardSerialization.getEdgeMetaData( scope, now, NodeType.SOURCE, Optional.<Shard>absent(), types );
 
         assertEquals( slice3, results.next().getShardIndex() );
 
@@ -193,11 +204,11 @@ public class EdgeShardSerializationTest {
         assertFalse( results.hasNext() );
 
 
-        edgeShardSerialization.removeEdgeMeta( scope, now, slice2, types ).execute();
+        edgeShardSerialization.removeEdgeMeta( scope, now, NodeType.SOURCE, slice2, types ).execute();
 
-        edgeShardSerialization.removeEdgeMeta( scope, now, slice3, types ).execute();
+        edgeShardSerialization.removeEdgeMeta( scope, now, NodeType.SOURCE, slice3, types ).execute();
 
-        results = edgeShardSerialization.getEdgeMetaData( scope, now, Optional.<Shard>absent(), types );
+        results = edgeShardSerialization.getEdgeMetaData( scope, now, NodeType.SOURCE, Optional.<Shard>absent(), types );
 
 
         assertFalse( results.hasNext() );

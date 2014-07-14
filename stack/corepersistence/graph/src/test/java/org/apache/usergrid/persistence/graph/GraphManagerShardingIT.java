@@ -35,6 +35,7 @@ import org.apache.usergrid.persistence.core.scope.ApplicationScope;
 import org.apache.usergrid.persistence.core.scope.ApplicationScopeImpl;
 import org.apache.usergrid.persistence.graph.guice.TestGraphModule;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeShardApproximation;
+import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeType;
 import org.apache.usergrid.persistence.model.entity.Id;
 import org.apache.usergrid.persistence.model.util.UUIDGenerator;
 
@@ -101,7 +102,7 @@ public class GraphManagerShardingIT {
         //each edge causes 4 counts
         final long writeCount = flushCount/4;
 
-        assertTrue( "Shard size must be >= flush Count", maxShardSize >= flushCount );
+        assertTrue( "Shard size must be >= beginFlush Count", maxShardSize >= flushCount );
 
         Id targetId = null;
 
@@ -115,14 +116,14 @@ public class GraphManagerShardingIT {
         }
 
 
-        long shardCount = nodeShardApproximation.getCount( scope, sourceId, 0l, edgeType );
+        long shardCount = nodeShardApproximation.getCount( scope, sourceId, NodeType.SOURCE,  0l, edgeType );
 
         assertEquals("Shard count for source node should be the same as write count", writeCount, shardCount);
 
 
         //now verify it's correct for the target
 
-        shardCount = nodeShardApproximation.getCount( scope, targetId, 0l, edgeType );
+        shardCount = nodeShardApproximation.getCount( scope, targetId, NodeType.TARGET,  0l, edgeType );
 
         assertEquals(1, shardCount);
 
@@ -151,7 +152,7 @@ public class GraphManagerShardingIT {
         //each edge causes 4 counts
         final long writeCount = flushCount/4;
 
-        assertTrue( "Shard size must be >= flush Count", maxShardSize >= flushCount );
+        assertTrue( "Shard size must be >= beginFlush Count", maxShardSize >= flushCount );
 
         Id sourceId = null;
 
@@ -165,14 +166,14 @@ public class GraphManagerShardingIT {
         }
 
 
-        long shardCount = nodeShardApproximation.getCount( scope, targetId, 0l, edgeType );
+        long shardCount = nodeShardApproximation.getCount( scope, targetId, NodeType.TARGET,  0l, edgeType );
 
         assertEquals("Shard count for source node should be the same as write count", writeCount, shardCount);
 
 
         //now verify it's correct for the target
 
-        shardCount = nodeShardApproximation.getCount( scope, sourceId, 0l, edgeType );
+        shardCount = nodeShardApproximation.getCount( scope, sourceId, NodeType.SOURCE,  0l, edgeType );
 
         assertEquals(1, shardCount);
 
