@@ -54,52 +54,23 @@ public class SizebasedEdgeShardStrategy implements EdgeShardStrategy {
 
 
     @Override
-    public ShardEntries getWriteShards( final ApplicationScope scope, final Id rowKeyId,  final NodeType nodeType, final long timestamp,
-                                final String... types ) {
+    public ShardEntries getWriteShards( final ApplicationScope scope, final Id rowKeyId, final NodeType nodeType,
+                                        final long timestamp, final String... types ) {
         return shardCache.getWriteShards( scope, rowKeyId, nodeType, timestamp, types );
     }
 
 
     @Override
-    public Iterator<ShardEntries> getReadShards( final ApplicationScope scope, final Id rowKeyId,   final NodeType nodeType,final long maxTimestamp,
-                                         final String... types ) {
+    public Iterator<ShardEntries> getReadShards( final ApplicationScope scope, final Id rowKeyId,
+                                                 final NodeType nodeType, final long maxTimestamp,
+                                                 final String... types ) {
         return shardCache.getReadShards( scope, rowKeyId, nodeType, maxTimestamp, types );
     }
 
 
     @Override
-    public void increment( final ApplicationScope scope, final Id rowKeyId,  final NodeType nodeType, final long shardId, final long count,
-                           final String... types ) {
+    public void increment( final ApplicationScope scope, final Id rowKeyId, final NodeType nodeType, final long shardId,
+                           final long count, final String... types ) {
         shardApproximation.increment( scope, rowKeyId, nodeType, shardId, count, types );
-    }
-
-
-    @Override
-    public String getSourceNodeCfName() {
-        return "Graph_Source_Node_Edges";
-    }
-
-
-    @Override
-    public String getTargetNodeCfName() {
-        return "Graph_Target_Node_Edges";
-    }
-
-
-    @Override
-    public String getSourceNodeTargetTypeCfName() {
-        return "Graph_Source_Node_Target_Type";
-    }
-
-
-    @Override
-    public String getTargetNodeSourceTypeCfName() {
-        return "Graph_Target_Node_Source_Type";
-    }
-
-
-    @Override
-    public String getGraphEdgeVersions() {
-        return "Graph_Edge_Versions";
     }
 }

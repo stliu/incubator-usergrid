@@ -32,6 +32,7 @@ import org.apache.usergrid.persistence.core.consistency.TimeService;
 import org.apache.usergrid.persistence.core.scope.ApplicationScope;
 import org.apache.usergrid.persistence.graph.GraphFig;
 import org.apache.usergrid.persistence.graph.exception.GraphRuntimeException;
+import org.apache.usergrid.persistence.graph.serialization.EdgeSerialization;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.EdgeShardSerialization;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeShardAllocation;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeShardApproximation;
@@ -55,17 +56,21 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
     private static final MinShardTimeComparator MIN_SHARD_TIME_COMPARATOR = new MinShardTimeComparator();
 
     private final EdgeShardSerialization edgeShardSerialization;
-//    private final NodeShardCounterSerialization edgeShardCounterSerialization;
+    private final EdgeSerialization edgeSerialization;
+    //    private final NodeShardCounterSerialization edgeShardCounterSerialization;
     private final NodeShardApproximation nodeShardApproximation;
     private final TimeService timeService;
     private final GraphFig graphFig;
     private final Keyspace keyspace;
 
+
     @Inject
     public NodeShardAllocationImpl( final EdgeShardSerialization edgeShardSerialization,
+                                    final EdgeSerialization edgeSerialization,
                                     final NodeShardApproximation nodeShardApproximation, final TimeService timeService,
                                     final GraphFig graphFig, final Keyspace keyspace ) {
         this.edgeShardSerialization = edgeShardSerialization;
+        this.edgeSerialization = edgeSerialization;
         this.nodeShardApproximation = nodeShardApproximation;
         this.timeService = timeService;
         this.graphFig = graphFig;
@@ -74,11 +79,11 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
 
 
     @Override
-    public Iterator<Shard> getShards( final ApplicationScope scope, final Id nodeId, final NodeType nodeType, final Optional<Shard> maxShardId,
-                                            final String... edgeTypes ) {
+    public Iterator<Shard> getShards( final ApplicationScope scope, final Id nodeId, final NodeType nodeType,
+                                      final Optional<Shard> maxShardId, final String... edgeTypes ) {
 
         final Iterator<Shard> existingShards =
-                edgeShardSerialization.getEdgeMetaData( scope, nodeId,nodeType, maxShardId, edgeTypes );
+                edgeShardSerialization.getEdgeMetaData( scope, nodeId, nodeType, maxShardId, edgeTypes );
 
         final PushbackIterator<Shard> pushbackIterator = new PushbackIterator( existingShards );
 
@@ -95,7 +100,7 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
             final Shard shard = pushbackIterator.next();
 
             //we're done, our current time uuid is greater than the value stored
-            if ( shard.getCreatedTime() < minConflictTime  ) {
+            if ( shard.getCreatedTime() < minConflictTime ) {
                 //push it back into the iterator
                 pushbackIterator.pushback( shard );
                 break;
@@ -106,7 +111,7 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
 
 
         //clean up our future
-        Collections.sort(futures, MIN_SHARD_TIME_COMPARATOR);
+        Collections.sort( futures, MIN_SHARD_TIME_COMPARATOR );
 
 
         //we have more than 1 future value, we need to remove it
@@ -114,10 +119,11 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
         MutationBatch cleanup = keyspace.prepareMutationBatch();
 
         //remove all futures except the last one, it is the only value we shouldn't lazy remove
-        for ( int i = 1; i < futures.size() ; i++ ) {
+        for ( int i = 1; i < futures.size(); i++ ) {
             final Shard toRemove = futures.get( i );
 
-            final MutationBatch batch = edgeShardSerialization.removeEdgeMeta( scope, nodeId, nodeType, toRemove.getShardIndex(), edgeTypes );
+            final MutationBatch batch = edgeShardSerialization
+                    .removeEdgeMeta( scope, nodeId, nodeType, toRemove.getShardIndex(), edgeTypes );
 
             cleanup.mergeShallow( batch );
         }
@@ -131,7 +137,7 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
         }
 
 
-        final int futuresSize =  futures.size();
+        final int futuresSize = futures.size();
 
         if ( futuresSize > 0 ) {
             pushbackIterator.pushback( futures.get( 0 ) );
@@ -141,8 +147,8 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
         /**
          * Nothing to iterate, return an iterator with 0.
          */
-        if(!pushbackIterator.hasNext()){
-            pushbackIterator.pushback( new Shard(0l, 0l) );
+        if ( !pushbackIterator.hasNext() ) {
+            pushbackIterator.pushback( new Shard( 0l, 0l ) );
         }
 
         return pushbackIterator;
@@ -150,7 +156,8 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
 
 
     @Override
-    public boolean auditMaxShard( final ApplicationScope scope, final Id nodeId,final NodeType nodeType,  final String... edgeType ) {
+    public boolean auditMaxShard( final ApplicationScope scope, final Id nodeId, final NodeType nodeType,
+                                  final String... edgeType ) {
 
         final Iterator<Shard> maxShards = getShards( scope, nodeId, nodeType, Optional.<Shard>absent(), edgeType );
 
@@ -169,23 +176,32 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
          */
 
 
-        final long count = nodeShardApproximation.getCount( scope, nodeId, nodeType,  maxShard.getShardIndex(), edgeType );
+        final long count =
+                nodeShardApproximation.getCount( scope, nodeId, nodeType, maxShard.getShardIndex(), edgeType );
 
         if ( count < graphFig.getShardSize() ) {
             return false;
         }
 
+
+        /**
+         * TODO, use the EdgeShardStrategy and ShardEdgeSerialization to audit this shard
+         */
+
+        //get the max edge, in this shard, and write it.
+
+
         //try to get a lock here, and fail if one isn't present
 
-//        final long newShardTime = timeService.getCurrentTime() + graphFig.getShardCacheTimeout() * 2;
-//
-//
-//        try {
-//            this.edgeShardSerialization.writeEdgeMeta( scope, nodeId, newShardTime, edgeType ).execute();
-//        }
-//        catch ( ConnectionException e ) {
-//            throw new GraphRuntimeException( "Unable to write the new edge metadata" );
-//        }
+        //        final long newShardTime = timeService.getCurrentTime() + graphFig.getShardCacheTimeout() * 2;
+        //
+        //
+        //        try {
+        //            this.edgeShardSerialization.writeEdgeMeta( scope, nodeId, newShardTime, edgeType ).execute();
+        //        }
+        //        catch ( ConnectionException e ) {
+        //            throw new GraphRuntimeException( "Unable to write the new edge metadata" );
+        //        }
 
 
         return true;
@@ -194,7 +210,7 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
 
     @Override
     public long getMinTime() {
-        return timeService.getCurrentTime() - (2 * graphFig.getShardCacheTimeout());
+        return timeService.getCurrentTime() - ( 2 * graphFig.getShardCacheTimeout() );
     }
 
 
@@ -203,16 +219,15 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
      */
     private static final class MinShardTimeComparator implements Comparator<Shard> {
 
-            @Override
-            public int compare( final Shard s1, final Shard s2 ) {
-                int result =  Long.compare( s1.getCreatedTime(), s2.getCreatedTime() );
+        @Override
+        public int compare( final Shard s1, final Shard s2 ) {
+            int result = Long.compare( s1.getCreatedTime(), s2.getCreatedTime() );
 
-                if(result == 0){
-                    result = Long.compare( s1.getShardIndex(), s2.getShardIndex() );
-                }
-
-                return result;
+            if ( result == 0 ) {
+                result = Long.compare( s1.getShardIndex(), s2.getShardIndex() );
             }
-        }
 
+            return result;
+        }
+    }
 }

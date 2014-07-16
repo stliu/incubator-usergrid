@@ -21,8 +21,8 @@ package org.apache.usergrid.persistence.graph.serialization.impl.shard.impl;
 
 import org.apache.usergrid.persistence.core.astyanax.CompositeFieldSerializer;
 import org.apache.usergrid.persistence.core.astyanax.IdRowCompositeSerializer;
+import org.apache.usergrid.persistence.graph.serialization.impl.shard.EdgeRowKey;
 import org.apache.usergrid.persistence.model.entity.Id;
-import org.apache.usergrid.persistence.model.entity.SimpleId;
 
 import com.netflix.astyanax.model.CompositeBuilder;
 import com.netflix.astyanax.model.CompositeParser;
@@ -31,9 +31,8 @@ import com.netflix.astyanax.model.CompositeParser;
 /**
  * Class to perform serialization for row keys from edges
  */
-public class EdgeRowKeySerializer implements CompositeFieldSerializer<EdgeRowKey> {
 
-    private static final EdgeRowKeySerializer INSTANCE = new EdgeRowKeySerializer();
+public class EdgeRowKeySerializer implements CompositeFieldSerializer<EdgeRowKey> {
 
     private static final IdRowCompositeSerializer ID_SER = IdRowCompositeSerializer.get();
 
@@ -42,13 +41,10 @@ public class EdgeRowKeySerializer implements CompositeFieldSerializer<EdgeRowKey
     public void toComposite( final CompositeBuilder builder, final EdgeRowKey key ) {
 
         //add the row id to the composite
-        ID_SER.toComposite( builder, key.nodeId );
-
-        builder.addInteger( key.edgeTypes.length );
-
-        for(String type: key.edgeTypes){
-            builder.addString( type );
-        }
+        ID_SER.toComposite( builder, key.sourceId );
+        builder.addString( key.edgeType );
+        ID_SER.toComposite( builder, key.targetId );
+        builder.addLong( key.shardId );
     }
 
 
@@ -56,26 +52,12 @@ public class EdgeRowKeySerializer implements CompositeFieldSerializer<EdgeRowKey
     public EdgeRowKey fromComposite( final CompositeParser composite ) {
 
         final Id sourceId = ID_SER.fromComposite( composite );
+        final String edgeType = composite.readString();
+        final Id targetId = ID_SER.fromComposite( composite );
+        final long shard = composite.readLong();
 
-
-        final int length = composite.readInteger();
-
-        String[] types = new String[length];
-
-        for(int i = 0; i < length; i++){
-            types[i] = composite.readString();
-        }
-
-        return new EdgeRowKey( sourceId, types );
-
+        return new EdgeRowKey( sourceId, edgeType, targetId, shard );
     }
 
 
-
-    /**
-     * Get the singleton serializer
-     */
-    public static EdgeRowKeySerializer get() {
-        return INSTANCE;
-    }
 }

@@ -116,6 +116,8 @@ public class GraphManagerShardingIT {
         }
 
 
+
+
         long shardCount = nodeShardApproximation.getCount( scope, sourceId, NodeType.SOURCE,  0l, edgeType );
 
         assertEquals("Shard count for source node should be the same as write count", writeCount, shardCount);

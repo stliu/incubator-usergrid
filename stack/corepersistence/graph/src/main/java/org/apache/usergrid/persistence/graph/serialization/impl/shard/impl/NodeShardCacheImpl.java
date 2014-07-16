@@ -47,7 +47,6 @@ import com.google.common.cache.LoadingCache;
 import com.google.inject.Inject;
 
 
-
 /**
  * Simple implementation of the shard.  Uses a local Guava shard with a timeout.  If a value is not present in the
  * shard, it will need to be searched via cassandra.
@@ -67,8 +66,8 @@ public class NodeShardCacheImpl implements NodeShardCache {
      */
     @Inject
     public NodeShardCacheImpl( final NodeShardAllocation nodeShardAllocation, final GraphFig graphFig ) {
-        Preconditions.checkNotNull(nodeShardAllocation, "nodeShardAllocation is required");
-        Preconditions.checkNotNull(graphFig, "consistencyFig is required");
+        Preconditions.checkNotNull( nodeShardAllocation, "nodeShardAllocation is required" );
+        Preconditions.checkNotNull( graphFig, "consistencyFig is required" );
 
         this.nodeShardAllocation = nodeShardAllocation;
         this.graphFig = graphFig;
@@ -81,7 +80,8 @@ public class NodeShardCacheImpl implements NodeShardCache {
             public void propertyChange( final PropertyChangeEvent evt ) {
                 final String propertyName = evt.getPropertyName();
 
-                if ( propertyName.equals( GraphFig.SHARD_CACHE_SIZE ) || propertyName.equals( GraphFig.SHARD_CACHE_TIMEOUT ) ) {
+                if ( propertyName.equals( GraphFig.SHARD_CACHE_SIZE ) || propertyName
+                        .equals( GraphFig.SHARD_CACHE_TIMEOUT ) ) {
                     updateCache();
                 }
             }
@@ -95,8 +95,8 @@ public class NodeShardCacheImpl implements NodeShardCache {
 
 
     @Override
-    public ShardEntries getWriteShards( final ApplicationScope scope, final Id nodeId, final NodeType nodeType, final long timestamp,
-                               final String... edgeType ) {
+    public ShardEntries getWriteShards( final ApplicationScope scope, final Id nodeId, final NodeType nodeType,
+                                        final long timestamp, final String... edgeType ) {
 
 
         final CacheKey key = new CacheKey( scope, nodeId, nodeType, edgeType );
@@ -121,26 +121,27 @@ public class NodeShardCacheImpl implements NodeShardCache {
 
 
     @Override
-    public Iterator<ShardEntries> getReadShards( final ApplicationScope scope, final Id nodeId, final NodeType nodeType, final long maxTimestamp,
-                                     final String... edgeType ) {
+    public Iterator<ShardEntries> getReadShards( final ApplicationScope scope, final Id nodeId, final NodeType nodeType,
+                                                 final long maxTimestamp, final String... edgeType ) {
         final CacheKey key = new CacheKey( scope, nodeId, nodeType, edgeType );
-              CacheEntry entry;
+        CacheEntry entry;
 
-              try {
-                  entry = this.graphs.get( key );
-              }
-              catch ( ExecutionException e ) {
-                  throw new GraphRuntimeException( "Unable to load shard key for graph", e );
-              }
+        try {
+            entry = this.graphs.get( key );
+        }
+        catch ( ExecutionException e ) {
+            throw new GraphRuntimeException( "Unable to load shard key for graph", e );
+        }
 
         Iterator<ShardEntries> iterator = entry.getShards( maxTimestamp );
 
-        if(iterator == null){
+        if ( iterator == null ) {
             return Collections.<ShardEntries>emptyList().iterator();
         }
 
         return iterator;
     }
+
 
     /**
      * This is a race condition.  We could re-init the shard while another thread is reading it.  This is fine, the read
@@ -149,27 +150,31 @@ public class NodeShardCacheImpl implements NodeShardCache {
     private void updateCache() {
 
         this.graphs = CacheBuilder.newBuilder().maximumSize( graphFig.getShardCacheSize() )
-                  .expireAfterWrite( graphFig.getShardCacheSize(), TimeUnit.MILLISECONDS )
-                  .build( new CacheLoader<CacheKey, CacheEntry>() {
+                                  .expireAfterWrite( graphFig.getShardCacheSize(), TimeUnit.MILLISECONDS )
+                                  .build( new CacheLoader<CacheKey, CacheEntry>() {
 
 
-                      @Override
-                      public CacheEntry load( final CacheKey key ) throws Exception {
+                                      @Override
+                                      public CacheEntry load( final CacheKey key ) throws Exception {
 
-//
-//                          /**
-//                           * Perform an audit in case we need to allocate a new shard
-//                           */
-//                          nodeShardAllocation.auditMaxShard( key.scope, key.id, key.types );
-//                          //TODO, we need to put some sort of upper bounds on this, it could possibly get too large
+                                          //
+                                          //                          /**
+                                          //                           * Perform an audit in case we need to allocate
+                                          // a new shard
+                                          //                           */
+                                          //                          nodeShardAllocation.auditMaxShard( key.scope,
+                                          // key.id, key.types );
+                                          //                          //TODO, we need to put some sort of upper
+                                          // bounds on this, it could possibly get too large
 
 
-                          final Iterator<Shard> edges = nodeShardAllocation
-                                  .getShards( key.scope, key.id, key.nodeType,  Optional.<Shard>absent(), key.types );
+                                          final Iterator<Shard> edges = nodeShardAllocation
+                                                  .getShards( key.scope, key.id, key.nodeType, Optional.<Shard>absent(),
+                                                          key.types );
 
-                          return new CacheEntry( edges );
-                      }
-                  } );
+                                          return new CacheEntry( edges );
+                                      }
+                                  } );
     }
 
 
@@ -241,7 +246,7 @@ public class NodeShardCacheImpl implements NodeShardCache {
 
 
         private CacheEntry( final Iterator<Shard> shards ) {
-            this.shards = new TreeSet<>( );
+            this.shards = new TreeSet<>();
 
             for ( Shard shard : IterableUtil.wrap( shards ) ) {
                 this.shards.add( shard );
@@ -254,23 +259,21 @@ public class NodeShardCacheImpl implements NodeShardCache {
          */
         public ShardEntries getShardId( final Long seek ) {
             return bootstrapEntry();
-//            return this.shards.floor( seek );
+            //            return this.shards.floor( seek );
         }
 
 
         /**
          * Get all shards <= this one in decending order
-         * @return
          */
-        public Iterator<ShardEntries> getShards( final Long maxShard ){
-            return  Collections.singleton(bootstrapEntry() ).iterator();
-//            return this.shards.headSet(maxShard, true  ).descendingIterator();
+        public Iterator<ShardEntries> getShards( final Long maxShard ) {
+            return Collections.singleton( bootstrapEntry() ).iterator();
+            //            return this.shards.headSet(maxShard, true  ).descendingIterator();
         }
 
-        private ShardEntries bootstrapEntry(){
-            return new ShardEntries( Collections.singleton( new Shard(0l, 0l) ) );
+
+        private ShardEntries bootstrapEntry() {
+            return new ShardEntries( Collections.singleton( new Shard( 0l, 0l ) ) );
         }
     }
-
-
 }

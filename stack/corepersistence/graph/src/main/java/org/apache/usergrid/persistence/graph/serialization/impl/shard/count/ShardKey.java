@@ -30,11 +30,11 @@ import org.apache.usergrid.persistence.model.entity.Id;
  * Key for shards and counts
  */
 public class ShardKey {
-    private final ApplicationScope scope;
-    private final Id nodeId;
-    private final long shardId;
-    private final NodeType nodeType;
-    private final String[] edgeTypes;
+    public final ApplicationScope scope;
+    public final Id nodeId;
+    public final long shardId;
+    public final NodeType nodeType;
+    public final String[] edgeTypes;
 
 
     public ShardKey( final ApplicationScope scope, final Id nodeId, final NodeType nodeType, final long shardId, final String... edgeTypes ) {
@@ -45,32 +45,6 @@ public class ShardKey {
         this.nodeType = nodeType;
     }
 
-
-
-
-    public ApplicationScope getScope() {
-        return scope;
-    }
-
-
-    public Id getNodeId() {
-        return nodeId;
-    }
-
-
-    public long getShardId() {
-        return shardId;
-    }
-
-
-    public String[] getEdgeTypes() {
-        return edgeTypes;
-    }
-
-
-    public NodeType getNodeType() {
-        return nodeType;
-    }
 
 
     @Override

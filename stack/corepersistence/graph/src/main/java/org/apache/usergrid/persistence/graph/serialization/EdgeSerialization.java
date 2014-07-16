@@ -36,7 +36,7 @@ import com.netflix.astyanax.MutationBatch;
 /**
  * Simple interface for serializing ONLY an edge
  */
-public interface EdgeSerialization extends Migration {
+public interface EdgeSerialization {
 
 
     /**

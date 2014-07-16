@@ -23,6 +23,7 @@ package org.apache.usergrid.persistence.graph.serialization.impl.shard;
 import java.util.Iterator;
 import java.util.UUID;
 
+import org.apache.usergrid.persistence.core.astyanax.MultiTennantColumnFamily;
 import org.apache.usergrid.persistence.core.scope.ApplicationScope;
 import org.apache.usergrid.persistence.model.entity.Id;
 
@@ -65,32 +66,6 @@ public interface EdgeShardStrategy {
     public void increment(final ApplicationScope scope,final Id rowKeyId, final NodeType nodeType, long shardId, long count ,final  String... types );
 
 
-    /**
-     * Get the name of the column family for getting source nodes
-     */
-    public String getSourceNodeCfName();
-
-    /**
-     * Get the name of the column family for getting target nodes
-     */
-    public String getTargetNodeCfName();
-
-
-    /**
-     * Get the name of the column family for getting source nodes  with a target type
-     */
-    public String getSourceNodeTargetTypeCfName();
-
-    /**
-     * Get the name of the column family for getting target nodes with a source type
-     */
-    public String getTargetNodeSourceTypeCfName();
-
-    /**
-     * Get the Graph edge versions cf
-     * @return
-     */
-    public String getGraphEdgeVersions();
 
 
 }

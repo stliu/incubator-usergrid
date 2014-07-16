@@ -29,6 +29,8 @@ import org.apache.cassandra.db.marshal.CounterColumnType;
 
 import org.apache.usergrid.persistence.core.astyanax.CassandraConfig;
 import org.apache.usergrid.persistence.core.astyanax.ColumnTypes;
+import org.apache.usergrid.persistence.core.astyanax.CompositeFieldSerializer;
+import org.apache.usergrid.persistence.core.astyanax.IdRowCompositeSerializer;
 import org.apache.usergrid.persistence.core.astyanax.MultiTennantColumnFamily;
 import org.apache.usergrid.persistence.core.astyanax.MultiTennantColumnFamilyDefinition;
 import org.apache.usergrid.persistence.core.astyanax.OrganizationScopedRowKeySerializer;
@@ -36,8 +38,8 @@ import org.apache.usergrid.persistence.core.astyanax.ScopedRowKey;
 import org.apache.usergrid.persistence.core.scope.ApplicationScope;
 import org.apache.usergrid.persistence.graph.GraphFig;
 import org.apache.usergrid.persistence.graph.exception.GraphRuntimeException;
-import org.apache.usergrid.persistence.graph.serialization.impl.shard.impl.EdgeRowKey;
-import org.apache.usergrid.persistence.graph.serialization.impl.shard.impl.EdgeRowKeySerializer;
+import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeType;
+import org.apache.usergrid.persistence.model.entity.Id;
 
 import com.google.common.base.Preconditions;
 import com.google.inject.Inject;
@@ -48,6 +50,8 @@ import com.netflix.astyanax.connectionpool.OperationResult;
 import com.netflix.astyanax.connectionpool.exceptions.ConnectionException;
 import com.netflix.astyanax.connectionpool.exceptions.NotFoundException;
 import com.netflix.astyanax.model.Column;
+import com.netflix.astyanax.model.CompositeBuilder;
+import com.netflix.astyanax.model.CompositeParser;
 import com.netflix.astyanax.serializers.LongSerializer;
 
 
@@ -56,12 +60,14 @@ import com.netflix.astyanax.serializers.LongSerializer;
 public class NodeShardCounterSerializationImpl implements NodeShardCounterSerialization {
 
 
+    private static final ShardKeySerializer SHARD_KEY_SERIALIZER = new ShardKeySerializer();
+
     /**
      * Edge shards
      */
-    private static final MultiTennantColumnFamily<ApplicationScope, EdgeRowKey, Long> EDGE_SHARD_COUNTS =
+    private static final MultiTennantColumnFamily<ApplicationScope, ShardKey, Long> EDGE_SHARD_COUNTS =
             new MultiTennantColumnFamily<>( "Edge_Shard_Counts",
-                    new OrganizationScopedRowKeySerializer<>( new EdgeRowKeySerializer() ), LongSerializer.get() );
+                    new OrganizationScopedRowKeySerializer<>( SHARD_KEY_SERIALIZER ), LongSerializer.get() );
 
 
     protected final Keyspace keyspace;
@@ -92,12 +98,11 @@ public class NodeShardCounterSerializationImpl implements NodeShardCounterSerial
             final ShardKey key = entry.getKey();
             final long value = entry.getValue().get();
 
-            final EdgeRowKey edgeRowKey = new EdgeRowKey( key.getNodeId(), key.getEdgeTypes() );
 
-            final ScopedRowKey rowKey = ScopedRowKey.fromKey( key.getScope(), edgeRowKey );
+            final ScopedRowKey rowKey = ScopedRowKey.fromKey( key.scope, key );
 
 
-            batch.withRow( EDGE_SHARD_COUNTS, rowKey ).incrementCounterColumn( key.getShardId(), value );
+            batch.withRow( EDGE_SHARD_COUNTS, rowKey ).incrementCounterColumn( key.shardId, value );
         }
 
 
@@ -108,14 +113,12 @@ public class NodeShardCounterSerializationImpl implements NodeShardCounterSerial
     @Override
     public long getCount( final ShardKey key ) {
 
-        final EdgeRowKey edgeRowKey = new EdgeRowKey( key.getNodeId(), key.getEdgeTypes() );
-
-        final ScopedRowKey rowKey = ScopedRowKey.fromKey( key.getScope(), edgeRowKey );
+        final ScopedRowKey rowKey = ScopedRowKey.fromKey( key.scope, key );
 
 
         try {
             OperationResult<Column<Long>> column =
-                    keyspace.prepareQuery( EDGE_SHARD_COUNTS ).getKey( rowKey ).getColumn( key.getShardId() ).execute();
+                    keyspace.prepareQuery( EDGE_SHARD_COUNTS ).getKey( rowKey ).getColumn( key.shardId ).execute();
 
             return column.getResult().getLongValue();
         }
@@ -136,4 +139,68 @@ public class NodeShardCounterSerializationImpl implements NodeShardCounterSerial
                         ColumnTypes.LONG_TYPE_REVERSED, CounterColumnType.class.getSimpleName(),
                         MultiTennantColumnFamilyDefinition.CacheOption.KEYS ) );
     }
+
+
+
+    private static class ShardKeySerializer implements CompositeFieldSerializer<ShardKey> {
+
+        private static final IdRowCompositeSerializer ID_SER = IdRowCompositeSerializer.get();
+
+
+        @Override
+        public void toComposite( final CompositeBuilder builder, final ShardKey key ) {
+
+            ID_SER.toComposite( builder, key.nodeId );
+
+            builder.addInteger( getValue( key.nodeType ) );
+
+            builder.addLong( key.shardId );
+
+            builder.addInteger( key.edgeTypes.length );
+
+            for ( String type : key.edgeTypes ) {
+                builder.addString( type );
+            }
+        }
+
+
+        @Override
+        public ShardKey fromComposite( final CompositeParser composite ) {
+
+            final Id sourceId = ID_SER.fromComposite( composite );
+
+            final NodeType type = getType( composite.readInteger() );
+
+            final long shardId = composite.readLong();
+
+            final int length = composite.readInteger();
+
+            String[] types = new String[length];
+
+            for ( int i = 0; i < length; i++ ) {
+                types[i] = composite.readString();
+            }
+
+            return new ShardKey(null, sourceId, type, shardId, types);
+        }
+
+
+        private int getValue( NodeType type ) {
+            if ( type == NodeType.SOURCE ) {
+                return 0;
+            }
+
+            return 1;
+        }
+
+
+        public NodeType getType( int value ) {
+            if ( value == 0 ) {
+                return NodeType.SOURCE;
+            }
+
+            return NodeType.TARGET;
+        }
+    }
+
 }

@@ -66,7 +66,8 @@ public class EdgeShardSerializationImpl implements EdgeShardSerialization {
      */
     private static final MultiTennantColumnFamily<ApplicationScope, DirectedRowKey, Long> EDGE_SHARDS =
             new MultiTennantColumnFamily<>( "Edge_Shards",
-                    new OrganizationScopedRowKeySerializer<>( new DirectedEdgeRowKeySerializer() ), LongSerializer.get() );
+                    new OrganizationScopedRowKeySerializer<>( new DirectedEdgeRowKeySerializer() ),
+                    LongSerializer.get() );
 
 
     private static final byte HOLDER = 0x00;
@@ -239,8 +240,6 @@ public class EdgeShardSerializationImpl implements EdgeShardSerialization {
 
             return NodeType.TARGET;
         }
-
-
     }
 
 

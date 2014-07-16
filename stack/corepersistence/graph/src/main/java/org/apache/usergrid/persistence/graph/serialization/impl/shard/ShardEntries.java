@@ -23,7 +23,8 @@ import java.util.Set;
 
 
 /**
- * There are cases where we need to read or write to more than 1 shard.
+ * There are cases where we need to read or write to more than 1 shard.  This object encapsulates
+ * a set of shards that should be written to.
  */
 public class ShardEntries {
 
