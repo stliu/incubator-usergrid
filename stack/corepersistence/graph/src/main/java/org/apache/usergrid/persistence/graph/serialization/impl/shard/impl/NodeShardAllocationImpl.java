@@ -26,18 +26,28 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.commons.collections4.iterators.PushbackIterator;
 
 import org.apache.usergrid.persistence.core.consistency.TimeService;
 import org.apache.usergrid.persistence.core.scope.ApplicationScope;
+import org.apache.usergrid.persistence.graph.Edge;
 import org.apache.usergrid.persistence.graph.GraphFig;
+import org.apache.usergrid.persistence.graph.MarkedEdge;
 import org.apache.usergrid.persistence.graph.exception.GraphRuntimeException;
+import org.apache.usergrid.persistence.graph.impl.SimpleSearchByEdgeType;
+import org.apache.usergrid.persistence.graph.impl.SimpleSearchByIdType;
 import org.apache.usergrid.persistence.graph.serialization.EdgeSerialization;
+import org.apache.usergrid.persistence.graph.serialization.impl.shard.EdgeColumnFamilies;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.EdgeShardSerialization;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeShardAllocation;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeShardApproximation;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeType;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.Shard;
+import org.apache.usergrid.persistence.graph.serialization.impl.shard.ShardEntries;
+import org.apache.usergrid.persistence.graph.serialization.impl.shard.ShardedEdgeSerialization;
 import org.apache.usergrid.persistence.model.entity.Id;
 
 import com.google.common.base.Optional;
@@ -53,11 +63,13 @@ import com.netflix.astyanax.connectionpool.exceptions.ConnectionException;
 public class NodeShardAllocationImpl implements NodeShardAllocation {
 
 
+    private static final Logger LOG = LoggerFactory.getLogger(NodeShardAllocationImpl.class);
+
     private static final MinShardTimeComparator MIN_SHARD_TIME_COMPARATOR = new MinShardTimeComparator();
 
     private final EdgeShardSerialization edgeShardSerialization;
-    private final EdgeSerialization edgeSerialization;
-    //    private final NodeShardCounterSerialization edgeShardCounterSerialization;
+    private final EdgeColumnFamilies edgeColumnFamilies;
+    private final ShardedEdgeSerialization shardedEdgeSerialization;
     private final NodeShardApproximation nodeShardApproximation;
     private final TimeService timeService;
     private final GraphFig graphFig;
@@ -66,11 +78,13 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
 
     @Inject
     public NodeShardAllocationImpl( final EdgeShardSerialization edgeShardSerialization,
-                                    final EdgeSerialization edgeSerialization,
+                                    final EdgeColumnFamilies edgeColumnFamilies,
+                                    final ShardedEdgeSerialization shardedEdgeSerialization,
                                     final NodeShardApproximation nodeShardApproximation, final TimeService timeService,
                                     final GraphFig graphFig, final Keyspace keyspace ) {
         this.edgeShardSerialization = edgeShardSerialization;
-        this.edgeSerialization = edgeSerialization;
+        this.edgeColumnFamilies = edgeColumnFamilies;
+        this.shardedEdgeSerialization = shardedEdgeSerialization;
         this.nodeShardApproximation = nodeShardApproximation;
         this.timeService = timeService;
         this.graphFig = graphFig;
@@ -159,7 +173,8 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
     public boolean auditMaxShard( final ApplicationScope scope, final Id nodeId, final NodeType nodeType,
                                   final String... edgeType ) {
 
-        final Iterator<Shard> maxShards = getShards( scope, nodeId, nodeType, Optional.<Shard>absent(), edgeType );
+        final Iterator<Shard> maxShards =  edgeShardSerialization.getEdgeMetaData( scope, nodeId, nodeType, Optional.<Shard>absent(), edgeType );
+
 
 
         //if the first shard has already been allocated, do nothing.
@@ -171,10 +186,19 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
 
         final Shard maxShard = maxShards.next();
 
-        /**
-         * Check out if we have a count for our shard allocation
-         */
 
+
+        /**
+         * Nothing to do, it's been created very recently, we don't create a new one
+         */
+        if(maxShard.getCreatedTime() >= getMinTime()){
+            return false;
+        }
+
+
+        /**
+        * Check out if we have a count for our shard allocation
+        */
 
         final long count =
                 nodeShardApproximation.getCount( scope, nodeId, nodeType, maxShard.getShardIndex(), edgeType );
@@ -185,23 +209,63 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
 
 
         /**
-         * TODO, use the EdgeShardStrategy and ShardEdgeSerialization to audit this shard
+         * Allocate the shard
          */
 
-        //get the max edge, in this shard, and write it.
+        Iterator<MarkedEdge> edges;
+
+        /**
+         * This is fugly, I think our allocation interface needs to get more declarative
+         */
+        if(nodeType == NodeType.SOURCE){
+
+            if(edgeType.length == 1){
+                edges = shardedEdgeSerialization.getEdgesFromSource(edgeColumnFamilies, scope, new SimpleSearchByEdgeType( nodeId,  edgeType[0], Long.MAX_VALUE, null), Collections.singleton( new ShardEntries(Collections.singleton( maxShard ))).iterator()) ;
+            }
+
+            else if(edgeType.length == 2){
+                edges = shardedEdgeSerialization.getEdgesFromSourceByTargetType(edgeColumnFamilies, scope, new SimpleSearchByIdType( nodeId,  edgeType[0], Long.MAX_VALUE,  edgeType[1], null), Collections.singleton( new ShardEntries(Collections.singleton( maxShard ))).iterator());
+            }
+
+           else{
+                throw new UnsupportedOperationException( "More than 2 edge types aren't supported" );
+            }
+
+        }    else{
+
+            if(edgeType.length == 1){
+                edges = shardedEdgeSerialization.getEdgesToTarget(edgeColumnFamilies, scope, new SimpleSearchByEdgeType( nodeId,  edgeType[0], Long.MAX_VALUE, null), Collections.singleton( new ShardEntries(Collections.singleton( maxShard ))).iterator()) ;
+            }
+
+            else if(edgeType.length == 2){
+                edges = shardedEdgeSerialization.getEdgesToTargetBySourceType(edgeColumnFamilies, scope, new SimpleSearchByIdType( nodeId,  edgeType[0], Long.MAX_VALUE,  edgeType[1], null), Collections.singleton( new ShardEntries(Collections.singleton( maxShard ))).iterator());
+            }
+
+           else{
+                throw new UnsupportedOperationException( "More than 2 edge types aren't supported" );
+            }
+        }
 
 
-        //try to get a lock here, and fail if one isn't present
+        if(!edges.hasNext()){
+            LOG.warn( "Tried to allocate a new shard for node id {} with edge types {}, but no max value could be found in that row", nodeId, edgeType );
+            return false;
+        }
 
-        //        final long newShardTime = timeService.getCurrentTime() + graphFig.getShardCacheTimeout() * 2;
-        //
-        //
-        //        try {
-        //            this.edgeShardSerialization.writeEdgeMeta( scope, nodeId, newShardTime, edgeType ).execute();
-        //        }
-        //        catch ( ConnectionException e ) {
-        //            throw new GraphRuntimeException( "Unable to write the new edge metadata" );
-        //        }
+        //we have a next, allocate it based on the max
+
+        MarkedEdge marked = edges.next();
+
+        final long createTimestamp = timeService.getCurrentTime();
+
+
+        try {
+            this.edgeShardSerialization.writeEdgeMeta( scope, nodeId, nodeType,  marked.getTimestamp(), createTimestamp, edgeType ).execute();
+        }
+        catch ( ConnectionException e ) {
+            throw new GraphRuntimeException( "Unable to write the new edge metadata" );
+        }
+
 
 
         return true;
@@ -230,4 +294,6 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
             return result;
         }
     }
+
+
 }
