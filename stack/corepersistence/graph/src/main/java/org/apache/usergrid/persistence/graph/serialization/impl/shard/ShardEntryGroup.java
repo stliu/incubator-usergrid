@@ -21,192 +21,173 @@ package org.apache.usergrid.persistence.graph.serialization.impl.shard;
 
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.TreeMap;
+import java.util.TreeSet;
 
 
 /**
- * There are cases where we need to read or write to more than 1 shard.  This object encapsulates
- * a set of shards that should be written to and read from.  All reads should combine the data sets from
- * all shards in the group, and writes should be written to each shard.  Once the shard can safely be compacted
- * a background process should be triggered to remove additional shards and make seeks faster.  This multiread/write
- * should only occur during the time period of the delta (in milliseconds), after which the next read will asynchronously compact the
- * shards into a single shard.
+ * There are cases where we need to read or write to more than 1 shard.  This object encapsulates a set of shards that
+ * should be written to and read from.  All reads should combine the data sets from all shards in the group, and writes
+ * should be written to each shard.  Once the shard can safely be compacted a background process should be triggered to
+ * remove additional shards and make seeks faster.  This multiread/write should only occur during the time period of the
+ * delta (in milliseconds), after which the next read will asynchronously compact the shards into a single shard.
  */
 public class ShardEntryGroup {
 
 
-    private TreeMap<Long, Shard> shards;
-
-    private Shard minShardByIndex;
+    private TreeSet<Shard> shards;
 
     private final long delta;
 
-    private Shard neighbor;
+    private Shard compactionTarget;
+
+
+    private long maxCreatedTime;
 
 
     /**
      * The max delta we accept in milliseconds for create time to be considered a member of this group
-     * @param delta
      */
     public ShardEntryGroup( final long delta ) {
         this.delta = delta;
-        this.shards = new TreeMap<>( ShardTimeComparator.INSTANCE );
+        this.shards = new TreeSet<>();
+        this.maxCreatedTime = 0;
     }
 
 
     /**
-     * Only add a shard if the created timestamp is within the delta of one of the entries
-     * @param shard
-     * @return
+     * Only add a shard if it is within the rules require to meet a group.  The rules are outlined below.
+     *
+     * Case 1)  First shard in the group, always added
+     *
+     * Case 2) Shard is unmerged, it should be included with it's peers since other nodes may not have it yet
+     *
+     * Case 3) The list contains only non compacted shards, and this is last and and merged.  It is considered a lower
+     * bound
      */
-    public boolean addShard(final Shard shard){
+    public boolean addShard( final Shard shard ) {
+
+        //shards can be ar
 
         //compare the time and see if it falls withing any of the elements based on their timestamp
-        final long shardCreateTime = shard.getCreatedTime();
+        //        final long shardCreateTime = shard.getCreatedTime();
 
-        final Long lessThanKey = shards.floorKey( shardCreateTime );
+        //        final Long lessThanKey = shards.floorKey( shardCreateTime );
+        //
+        //        final Long greaterThanKey = shards.ceilingKey( shardCreateTime );
+        //
+        //        //first into the set
+        //        if ( lessThanKey == null && greaterThanKey == null ) {
+        //            addShardInternal( shard );
+        //            return true;
+        //        }
+        //
+        //        if ( lessThanKey != null && shardCreateTime - lessThanKey < delta ) {
+        //            addShardInternal( shard );
+        //            return true;
+        //        }
+        //
+        //
+        //        if ( greaterThanKey != null && greaterThanKey - shardCreateTime < delta ) {
+        //            addShardInternal( shard );
+        //
+        //            return true;
+        //        }
 
-        final Long greaterThanKey = shards.ceilingKey( shardCreateTime );
-
-
-        final long lessThanDelta = shardCreateTime - lessThanKey;
-
-        final long greaterThanDelta = greaterThanKey - shardCreateTime;
-
-        if(lessThanDelta < delta || greaterThanDelta < delta ){
-            this.shards.put( shardCreateTime, shard );
-
-            if(shard.compareTo( minShardByIndex ) < 0){
-                minShardByIndex = shard;
-            }
-
+        if ( shards.size() == 0 ) {
+            addShardInternal( shard );
             return true;
         }
+
+
+        //shard is not compacted, or it's predecessor isn't, we should include it in this group
+        if ( !shard.isCompacted() || !shards.last().isCompacted() ) {
+            addShardInternal( shard );
+            return true;
+        }
+
 
         return false;
     }
 
 
     /**
-     * Add the n-1 shard to the set.  This is required, because nodes that have not yet updated their
-     * shard caches can be writing reading to the n-1 node only
-     *
-     * @param shard The shard to possibly add as a neighbor
-     * @return True if this shard as added as a neighbor, false otherwise
+     * Add the shard and set the min created time
      */
-    public boolean setNeighbor( final Shard shard ){
+    private void addShardInternal( final Shard shard ) {
+        shards.add( shard );
 
-        //not in the transition state don't set the neighbor, it will slow seeks down
-        if(!isRolling()){
-            return false;
+        maxCreatedTime = Math.max( maxCreatedTime, shard.getCreatedTime() );
+
+        //it's not a compacted shard, so it's a candidate to be the compaction target
+        if ( !shard.isCompacted() && ( compactionTarget == null || shard.compareTo( compactionTarget ) < 0 ) ) {
+            compactionTarget = shard;
         }
-
-
-        neighbor = shard;
-        this.shards.put( shard.getCreatedTime(), shard );
-        return true;
-
     }
 
 
     /**
      * Get the entries that we should read from.
-     *
-     * @return
      */
-    public Collection<Shard> getReadShards(final long currentTime) {
-
-        /**
-         * The shards are still rolling (I.E can't be compacted)
-         */
-        if(needsCompaction( currentTime )){
-            return shards.values();
-        }
-
-        return Collections.singleton(minShardByIndex);
+    public Collection<Shard> getReadShards() {
+        return shards;
     }
 
 
     /**
      * Get the entries, with the max shard time being first. We write to all shards until they're migrated
-     *
-     * @return
      */
-    public Collection<Shard> getWriteShards() {
-        return shards.values();
+    public Collection<Shard> getWriteShards( long currentTime ) {
+
+        /**
+         * The shards in this set can be combined, we should only write to the compaction target to avoid
+         * adding data to other shards
+         */
+        if ( shouldCompact( currentTime ) ) {
+            return Collections.singleton( compactionTarget );
+        }
+
+
+        return shards;
     }
 
 
     /**
      * Get the shard all compactions should write to
-     * @return
      */
-    public Shard getMergeTarget(){
-        return minShardByIndex;
+    public Shard getCompactionTarget() {
+        return compactionTarget;
     }
 
 
     /**
      * Returns true if the newest created shard is path the currentTime - delta
+     *
      * @param currentTime The current system time in milliseconds
+     *
      * @return True if these shards can safely be combined into a single shard, false otherwise
      */
-    public boolean needsCompaction(final long currentTime){
+    public boolean shouldCompact( final long currentTime ) {
 
         /**
          * We don't have enough shards to compact, ignore
          */
-        if(shards.size() < 2){
+        if ( shards.size() < 2 ) {
             return false;
         }
 
-
-        final long maxTimestamp = shards.lastKey();
-
-
-        return currentTime - delta > maxTimestamp;
-    }
-
-
-    /**
-     * Return true if the shard is rolling.  If this is the case, we want to include the n-1 entry, since everyone
-     * may not yet have it until compaction is safe to perform
-     * @return
-     */
-    private boolean isRolling(){
-       return shards.size() > 1;
+        return currentTime - delta > maxCreatedTime;
     }
 
 
     /**
      * Return true if this shard can be deleted AFTER all of the data in it has been moved
-     * @param shard
-     * @return
      */
-    public boolean canBeDeleted(final Shard shard){
+    public boolean canBeDeleted( final Shard shard ) {
         //if we're a neighbor shard (n-1) or the target compaction shard, we can't be deleted
-        //we purposefully use .equals here, since 2 shards might have the same index with different timestamps (unlikely but could happen)
-        if(shard == neighbor ||  getMergeTarget().equals( shard )){
-            return false;
-        }
-
-        return true;
+        //we purposefully use shard index comparison over .equals here, since 2 shards might have the same index with
+        // different timestamps
+        // (unlikely but could happen)
+        return !shard.isCompacted() && ( compactionTarget != null && compactionTarget.getShardIndex() != shard
+                .getShardIndex() );
     }
-
-    /**
-     * Compares 2 shards based on create time.  Does not handle nulls intentionally
-     */
-    private static final class ShardTimeComparator implements Comparator<Long> {
-
-        public static final ShardTimeComparator INSTANCE = new ShardTimeComparator();
-
-
-        @Override
-        public int compare( final Long o1, final Long o2 ) {
-            return o1.compareTo( o2 );
-        }
-    }
-
-
 }

@@ -249,7 +249,7 @@ public class NodeShardCacheImpl implements NodeShardCache {
             this.shards = new TreeMap<>(ShardEntriesComparator.INSTANCE);
 
             for ( ShardEntryGroup shard : IterableUtil.wrap( shards ) ) {
-                this.shards.put(shard.getMergeTarget().getShardIndex() , shard );
+                this.shards.put(shard.getCompactionTarget().getShardIndex() , shard );
             }
         }
 

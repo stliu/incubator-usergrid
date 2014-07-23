@@ -21,8 +21,9 @@ package org.apache.usergrid.persistence.graph.serialization.impl.shard;
 
 import org.junit.Test;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 
@@ -36,7 +37,7 @@ public class ShardEntryGroupTest {
 
         final long delta = 10000;
 
-        Shard rootShard = new Shard( 0, 0 );
+        Shard rootShard = new Shard( 0, 0, false );
 
         ShardEntryGroup shardEntryGroup = new ShardEntryGroup( delta );
 
@@ -46,9 +47,9 @@ public class ShardEntryGroupTest {
 
         assertFalse( "Single shard cannot be deleted", shardEntryGroup.canBeDeleted( rootShard ) );
 
-        assertSame( "Same shard for merge target", rootShard, shardEntryGroup.getMergeTarget() );
+        assertNull( "No merge target found", shardEntryGroup.getCompactionTarget() );
 
-        assertFalse( "Merge cannot be run with a single shard", shardEntryGroup.needsCompaction( 0 ) );
+        assertFalse( "Merge cannot be run with a single shard", shardEntryGroup.shouldCompact( Long.MAX_VALUE ) );
     }
 
 
@@ -57,22 +58,130 @@ public class ShardEntryGroupTest {
 
         final long delta = 10000;
 
-        Shard firstShard = new Shard( 1000, 1000 );
+        Shard firstShard = new Shard( 1000, 1000, false );
 
-        Shard secondShard = new Shard( 1000, 1000 );
+        Shard secondShard = new Shard( 1000, 1001, false );
 
 
         ShardEntryGroup shardEntryGroup = new ShardEntryGroup( delta );
 
-        final boolean result = shardEntryGroup.addShard( rootShard );
+        boolean result = shardEntryGroup.addShard( firstShard );
 
         assertTrue( "Shard added", result );
 
-        assertFalse( "Single shard cannot be deleted", shardEntryGroup.canBeDeleted( rootShard ) );
+        result = shardEntryGroup.addShard( secondShard );
 
-        assertSame( "Same shard for merge target", rootShard, shardEntryGroup.getMergeTarget() );
+        assertTrue( " Shard added", result );
 
-        assertFalse( "Merge cannot be run with a single shard", shardEntryGroup.needsCompaction( 0 ) );
+
+        assertFalse( "Root shard cannot be deleted", shardEntryGroup.canBeDeleted( firstShard ) );
+
+        assertFalse( "Root shard cannot be deleted", shardEntryGroup.canBeDeleted( secondShard ) );
+
+        assertFalse( "Duplicate shard id cannot be deleted", shardEntryGroup.canBeDeleted( secondShard ) );
+
+        assertEquals( "Same shard for merge target", firstShard, shardEntryGroup.getCompactionTarget() );
+
+        //shouldn't return true, since we haven't passed delta time in the second shard
+        assertFalse( "Merge cannot be run within min time",
+                shardEntryGroup.shouldCompact( firstShard.getCreatedTime() + delta ) );
+
+        //shouldn't return true, since we haven't passed delta time in the second shard
+        assertFalse( "Merge cannot be run within min time",
+                shardEntryGroup.shouldCompact( secondShard.getCreatedTime() + delta ) );
+
+        assertTrue( "Merge should be run with after min time",
+                shardEntryGroup.shouldCompact( secondShard.getCreatedTime() + delta + 1 ) );
+    }
+
+
+    @Test
+    public void multipleShardGroups() {
+
+        final long delta = 10000;
+
+        Shard firstShard = new Shard( 1000, 10000, false );
+
+        Shard secondShard = new Shard( 999, 9000, false );
+
+        Shard compactedShard1 = new Shard( 900, 8000, true );
+
+        Shard compactedShard2 = new Shard( 800, 7000, true );
+
+
+        ShardEntryGroup shardEntryGroup = new ShardEntryGroup( delta );
+
+        boolean result = shardEntryGroup.addShard( firstShard );
+
+        assertTrue( "Shard added", result );
+
+        result = shardEntryGroup.addShard( secondShard );
+
+        assertTrue( " Shard added", result );
+
+        result = shardEntryGroup.addShard( compactedShard1 );
+
+        assertTrue( "Shard added", result );
+
+        result = shardEntryGroup.addShard( compactedShard2 );
+
+        assertFalse( "Shouldn't add since it's compacted", result );
+
+        ShardEntryGroup secondGroup = new ShardEntryGroup( delta );
+
+        result = secondGroup.addShard( compactedShard2 );
+
+        assertTrue( "Added successfully", result );
+    }
+
+
+    @Test
+    public void boundShardGroup() {
+
+        final long delta = 10000;
+
+        Shard firstShard = new Shard( 1000, 10000, false );
+
+        Shard secondShard = new Shard( 999, 9000, false );
+
+        Shard compactedShard1 = new Shard( 900, 8000, true );
+
+
+        ShardEntryGroup shardEntryGroup = new ShardEntryGroup( delta );
+
+        boolean result = shardEntryGroup.addShard( firstShard );
+
+        assertTrue( "Shard added", result );
+
+        result = shardEntryGroup.addShard( secondShard );
+
+        assertTrue( " Shard added", result );
+
+        result = shardEntryGroup.addShard( compactedShard1 );
+
+        assertTrue( "Shard added", result );
+
+
+
+        assertFalse( "Shard cannot be deleted", shardEntryGroup.canBeDeleted( firstShard ) );
+
+        assertFalse( "Root shard cannot be deleted", shardEntryGroup.canBeDeleted( secondShard ) );
+
+        assertFalse( "Duplicate shard id cannot be deleted", shardEntryGroup.canBeDeleted( secondShard ) );
+
+        assertEquals( "Same shard for merge target", firstShard, shardEntryGroup.getCompactionTarget() );
+
+        //shouldn't return true, since we haven't passed delta time in the second shard
+        assertFalse( "Merge cannot be run within min time",
+                shardEntryGroup.shouldCompact( firstShard.getCreatedTime() + delta ) );
+
+        //shouldn't return true, since we haven't passed delta time in the second shard
+        assertFalse( "Merge cannot be run within min time",
+                shardEntryGroup.shouldCompact( secondShard.getCreatedTime() + delta ) );
+
+        assertTrue( "Merge should be run with after min time",
+                shardEntryGroup.shouldCompact( secondShard.getCreatedTime() + delta + 1 ) );
+
     }
 }
 

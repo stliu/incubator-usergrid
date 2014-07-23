@@ -91,8 +91,6 @@ public class ShardEntryGroupIterator implements Iterator<ShardEntryGroup> {
             //we can't add this shard to the current group.  Add the group and return.
             next = shardEntryGroup;
 
-            shardEntryGroup.setNeighbor( shard );
-
             sourceIterator.pushback( shard );
         }
     }

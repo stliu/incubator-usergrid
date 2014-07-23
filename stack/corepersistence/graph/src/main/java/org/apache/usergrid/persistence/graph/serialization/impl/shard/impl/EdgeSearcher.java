@@ -52,7 +52,7 @@ public abstract class EdgeSearcher<R, C, T> implements ColumnParser<C, T>, Itera
          * TODO Shard fix this
          */
         return ScopedRowKey
-                .fromKey( scope, generateRowKey( shards.next().getMergeTarget().getShardIndex() ) );
+                .fromKey( scope, generateRowKey( shards.next().getCompactionTarget().getShardIndex() ) );
     }
 
 

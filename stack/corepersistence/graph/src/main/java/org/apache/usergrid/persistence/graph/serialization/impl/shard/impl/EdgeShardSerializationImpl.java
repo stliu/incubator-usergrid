@@ -66,11 +66,8 @@ public class EdgeShardSerializationImpl implements EdgeShardSerialization {
      */
     private static final MultiTennantColumnFamily<ApplicationScope, DirectedRowKey, Long> EDGE_SHARDS =
             new MultiTennantColumnFamily<>( "Edge_Shards",
-                    new OrganizationScopedRowKeySerializer<>( new DirectedEdgeRowKeySerializer() ),
-                    LongSerializer.get() );
+                    new OrganizationScopedRowKeySerializer<>( new EdgeShardRowKeySerializer() ), LongSerializer.get() );
 
-
-    private static final byte HOLDER = 0x00;
 
     private static final ShardColumnParser COLUMN_PARSER = new ShardColumnParser();
 
@@ -90,13 +87,14 @@ public class EdgeShardSerializationImpl implements EdgeShardSerialization {
 
 
     @Override
-    public MutationBatch writeEdgeMeta( final ApplicationScope scope, final Id nodeId, final NodeType nodeType,
-                                        final long shard, final long timestamp, final String... types ) {
-
+    public MutationBatch writeShardMeta( final ApplicationScope scope, final Id nodeId, final NodeType nodeType,
+                                         final Shard shard, final String... types ) {
 
         ValidationUtils.validateApplicationScope( scope );
         ValidationUtils.verifyIdentity( nodeId );
-        Preconditions.checkArgument( shard > -1, "shardId must be greater than -1" );
+        Preconditions.checkNotNull( shard );
+        Preconditions.checkArgument( shard.getShardIndex() > -1, "shardid must be greater than -1" );
+        Preconditions.checkArgument( shard.getCreatedTime() > -1, "createdTime must be greater than -1" );
         Preconditions.checkNotNull( types );
 
         final DirectedRowKey key = new DirectedRowKey( nodeId, nodeType, types );
@@ -105,15 +103,16 @@ public class EdgeShardSerializationImpl implements EdgeShardSerialization {
 
         final MutationBatch batch = keyspace.prepareMutationBatch();
 
-        batch.withTimestamp( timestamp ).withRow( EDGE_SHARDS, rowKey ).putColumn( shard, HOLDER );
+        batch.withTimestamp( shard.getCreatedTime() ).withRow( EDGE_SHARDS, rowKey )
+             .putColumn( shard.getShardIndex(), shard.isCompacted() );
 
         return batch;
     }
 
 
     @Override
-    public Iterator<Shard> getEdgeMetaData( final ApplicationScope scope, final Id nodeId, final NodeType nodeType,
-                                            final Optional<Shard> start, final String... types ) {
+    public Iterator<Shard> getShardMetaData( final ApplicationScope scope, final Id nodeId, final NodeType nodeType,
+                                             final Optional<Shard> start, final String... types ) {
         /**
          * If the edge is present, we need to being seeking from this
          */
@@ -139,12 +138,14 @@ public class EdgeShardSerializationImpl implements EdgeShardSerialization {
 
 
     @Override
-    public MutationBatch removeEdgeMeta( final ApplicationScope scope, final Id nodeId, final NodeType nodeType,
-                                         final long shard, final String... types ) {
+    public MutationBatch removeShardMeta( final ApplicationScope scope, final Id nodeId, final NodeType nodeType,
+                                          final Shard shard, final String... types ) {
 
         ValidationUtils.validateApplicationScope( scope );
         ValidationUtils.verifyIdentity( nodeId );
-        Preconditions.checkArgument( shard > -1, "shard must be greater than -1" );
+        Preconditions.checkNotNull( shard );
+        Preconditions.checkArgument( shard.getShardIndex() > -1, "shardid must be greater than -1" );
+        Preconditions.checkArgument( shard.getCreatedTime() > -1, "createdTime must be greater than -1" );
         Preconditions.checkNotNull( types );
 
         final DirectedRowKey key = new DirectedRowKey( nodeId, nodeType, types );
@@ -153,7 +154,7 @@ public class EdgeShardSerializationImpl implements EdgeShardSerialization {
 
         final MutationBatch batch = keyspace.prepareMutationBatch();
 
-        batch.withRow( EDGE_SHARDS, rowKey ).deleteColumn( shard );
+        batch.withRow( EDGE_SHARDS, rowKey ).deleteColumn( shard.getShardIndex() );
 
         return batch;
     }
@@ -186,7 +187,7 @@ public class EdgeShardSerializationImpl implements EdgeShardSerialization {
     }
 
 
-    private static class DirectedEdgeRowKeySerializer implements CompositeFieldSerializer<DirectedRowKey> {
+    private static class EdgeShardRowKeySerializer implements CompositeFieldSerializer<DirectedRowKey> {
 
         private static final IdRowCompositeSerializer ID_SER = IdRowCompositeSerializer.get();
 
@@ -247,7 +248,7 @@ public class EdgeShardSerializationImpl implements EdgeShardSerialization {
 
         @Override
         public Shard parseColumn( final Column<Long> column ) {
-            return new Shard( column.getName(), column.getTimestamp() );
+            return new Shard( column.getName(), column.getTimestamp(), column.getBooleanValue() );
         }
     }
 }

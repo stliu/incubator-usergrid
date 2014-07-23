@@ -40,11 +40,11 @@ public interface EdgeShardSerialization extends Migration{
      * @param scope The scope to write
      * @param nodeId The id in the edge
      * @param nodeType Is the node a source or target node
-     * @param shard The next time to write
-     * @param timestamp the timestamp to set on the shard
+     * @param shard The shard to write
      * @param types The types to write to.  Can be edge type, or edgeType+id type
      */
-    public MutationBatch writeEdgeMeta(ApplicationScope scope, Id nodeId, NodeType nodeType, long shard, long timestamp,  String... types);
+    public MutationBatch writeShardMeta( ApplicationScope scope, Id nodeId, NodeType nodeType, Shard shard,
+                                         String... types );
 
     /**
      * Get an iterator of all meta data and types.  Returns a range from High to low
@@ -55,7 +55,8 @@ public interface EdgeShardSerialization extends Migration{
      * @param types The types to use
      * @return
      */
-    public Iterator<Shard> getEdgeMetaData(ApplicationScope scope, Id nodeId, NodeType nodeType, Optional<Shard> start,  String... types);
+    public Iterator<Shard> getShardMetaData( ApplicationScope scope, Id nodeId, NodeType nodeType,
+                                             Optional<Shard> start, String... types );
 
     /**
      * Remove the shard from the edge meta data from the types.
@@ -67,6 +68,7 @@ public interface EdgeShardSerialization extends Migration{
      * @param types
      * @return
      */
-    public MutationBatch removeEdgeMeta(ApplicationScope scope, Id nodeId, NodeType nodeType, long shard, String... types);
+    public MutationBatch removeShardMeta( ApplicationScope scope, Id nodeId, NodeType nodeType, Shard shard,
+                                          String... types );
 
 }

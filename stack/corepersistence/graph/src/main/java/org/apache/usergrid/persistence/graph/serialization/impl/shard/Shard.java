@@ -23,11 +23,13 @@ public class Shard implements Comparable<Shard> {
 
     private final long shardIndex;
     private final long createdTime;
+    private final boolean compacted;
 
 
-    public Shard( final long shardIndex, final long createdTime ) {
+    public Shard( final long shardIndex, final long createdTime, final boolean compacted ) {
         this.shardIndex = shardIndex;
         this.createdTime = createdTime;
+        this.compacted = compacted;
     }
 
 
@@ -48,9 +50,15 @@ public class Shard implements Comparable<Shard> {
 
 
     /**
+     * Return true if this shard has been compacted
+     */
+    public boolean isCompacted() {
+        return compacted;
+    }
+
+
+    /**
      * Compare the shards based on the timestamp first, then the created time second
-     * @param o
-     * @return
      */
     @Override
     public int compareTo( final Shard o ) {
@@ -70,6 +78,19 @@ public class Shard implements Comparable<Shard> {
                 return -1;
             }
 
+            else {
+
+                //kind of arbitrary compacted takes precedence
+                if ( compacted && !o.compacted ) {
+                    return 1;
+                }
+
+                else if ( !compacted && o.compacted ){
+                    return -1;
+                }
+
+
+            }
             return 0;
         }
 

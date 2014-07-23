@@ -88,7 +88,7 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
                                                 final Optional<Shard> maxShardId, final String... edgeTypes ) {
 
         final Iterator<Shard> existingShards =
-                edgeShardSerialization.getEdgeMetaData( scope, nodeId, nodeType, maxShardId, edgeTypes );
+                edgeShardSerialization.getShardMetaData( scope, nodeId, nodeType, maxShardId, edgeTypes );
 
         return new ShardEntryGroupIterator( existingShards, graphFig.getShardMinDelta() );
     }
@@ -104,7 +104,7 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
          * latest
          */
         final Iterator<Shard> maxShards =
-                edgeShardSerialization.getEdgeMetaData( scope, nodeId, nodeType, Optional.<Shard>absent(), edgeType );
+                edgeShardSerialization.getShardMetaData( scope, nodeId, nodeType, Optional.<Shard>absent(), edgeType );
 
 
         //if the first shard has already been allocated, do nothing.
@@ -204,10 +204,12 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
 
         final long createTimestamp = timeService.getCurrentTime();
 
+        final Shard shard = new Shard(marked.getTimestamp(), createTimestamp, false);
+
 
         try {
             this.edgeShardSerialization
-                    .writeEdgeMeta( scope, nodeId, nodeType, marked.getTimestamp(), createTimestamp, edgeType )
+                    .writeShardMeta( scope, nodeId, nodeType, shard, edgeType )
                     .execute();
         }
         catch ( ConnectionException e ) {
