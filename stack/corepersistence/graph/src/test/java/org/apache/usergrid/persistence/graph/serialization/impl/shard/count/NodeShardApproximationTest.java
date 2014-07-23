@@ -454,6 +454,12 @@ public class NodeShardApproximationTest {
 
 
         @Override
+        public long getShardMinDelta() {
+            return 0;  //To change body of implemented methods use File | Settings | File Templates.
+        }
+
+
+        @Override
         public long getShardCacheSize() {
             return 0;  //To change body of implemented methods use File | Settings | File Templates.
         }

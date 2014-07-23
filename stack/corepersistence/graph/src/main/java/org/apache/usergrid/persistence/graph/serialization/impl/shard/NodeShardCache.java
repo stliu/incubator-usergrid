@@ -20,7 +20,6 @@ package org.apache.usergrid.persistence.graph.serialization.impl.shard;
 
 
 import java.util.Iterator;
-import java.util.UUID;
 
 import org.apache.usergrid.persistence.core.scope.ApplicationScope;
 import org.apache.usergrid.persistence.model.entity.Id;
@@ -41,7 +40,7 @@ public interface NodeShardCache {
      * @param timestamp The time to select the slice for.
      * @param edgeType
      */
-    public ShardEntries getWriteShards( final ApplicationScope scope, final Id nodeId, NodeType nodeType, final long timestamp,
+    public ShardEntryGroup getWriteShards( final ApplicationScope scope, final Id nodeId, NodeType nodeType, final long timestamp,
                                 final String... edgeType );
 
     /**
@@ -53,7 +52,7 @@ public interface NodeShardCache {
      * @param edgeType
      * @return
      */
-    public Iterator<ShardEntries> getReadShards( final ApplicationScope scope, final Id nodeId, NodeType nodeType, final long maxTimestamp,
+    public Iterator<ShardEntryGroup> getReadShards( final ApplicationScope scope, final Id nodeId, NodeType nodeType, final long maxTimestamp,
                                      final String... edgeType );
 
 }

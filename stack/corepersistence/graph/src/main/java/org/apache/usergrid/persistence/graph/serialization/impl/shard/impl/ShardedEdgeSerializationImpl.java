@@ -46,7 +46,7 @@ import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeType;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.RowKey;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.RowKeyType;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.Shard;
-import org.apache.usergrid.persistence.graph.serialization.impl.shard.ShardEntries;
+import org.apache.usergrid.persistence.graph.serialization.impl.shard.ShardEntryGroup;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.ShardedEdgeSerialization;
 import org.apache.usergrid.persistence.graph.serialization.util.EdgeUtils;
 import org.apache.usergrid.persistence.model.entity.Id;
@@ -200,77 +200,77 @@ public class ShardedEdgeSerializationImpl implements ShardedEdgeSerialization {
 
         final DirectedEdge sourceEdge = new DirectedEdge( targetNodeId, timestamp );
 
-        final ShardEntries sourceRowKeyShard =
+        final ShardEntryGroup sourceRowKeyShard =
                 writeEdgeShardStrategy.getWriteShards( scope, sourceNodeId, NodeType.SOURCE, timestamp, type );
 
         final MultiTennantColumnFamily<ApplicationScope, RowKey, DirectedEdge> sourceCf =
                 columnFamilies.getSourceNodeCfName();
 
 
-        for ( Shard shard : sourceRowKeyShard.getEntries() ) {
-
-            final long shardId = shard.getShardIndex();
-            final RowKey sourceRowKey = new RowKey( sourceNodeId, type, shardId );
-            op.writeEdge( sourceCf, sourceRowKey, sourceEdge );
-            op.countEdge( sourceNodeId, NodeType.SOURCE, shardId, type );
-        }
-
-
-        final ShardEntries sourceWithTypeRowKeyShard = writeEdgeShardStrategy
-                .getWriteShards( scope, sourceNodeId, NodeType.SOURCE, timestamp, type, targetNodeType );
-
-        final MultiTennantColumnFamily<ApplicationScope, RowKeyType, DirectedEdge> targetCf =
-                columnFamilies.getSourceNodeTargetTypeCfName();
-
-        for ( Shard shard : sourceWithTypeRowKeyShard.getEntries() ) {
-
-            final long shardId = shard.getShardIndex();
-            final RowKeyType sourceRowKeyType = new RowKeyType( sourceNodeId, type, targetNodeId, shardId );
-
-            op.writeEdge( targetCf, sourceRowKeyType, sourceEdge );
-            op.countEdge( sourceNodeId, NodeType.SOURCE, shardId, type, targetNodeType );
-        }
-
-
-        /**
-         * write edges from target<-source
-         */
-
-        final DirectedEdge targetEdge = new DirectedEdge( sourceNodeId, timestamp );
-
-
-        final ShardEntries targetRowKeyShard =
-                writeEdgeShardStrategy.getWriteShards( scope, targetNodeId, NodeType.TARGET, timestamp, type );
-
-        final MultiTennantColumnFamily<ApplicationScope, RowKey, DirectedEdge> sourceByTargetCf =
-                columnFamilies.getTargetNodeCfName();
-
-        for ( Shard shard : targetRowKeyShard.getEntries() ) {
-            final long shardId = shard.getShardIndex();
-            final RowKey targetRowKey = new RowKey( targetNodeId, type, shardId );
-
-            op.writeEdge( sourceByTargetCf, targetRowKey, targetEdge );
-            op.countEdge( targetNodeId, NodeType.TARGET, shardId, type );
-        }
-
-
-        final ShardEntries targetWithTypeRowKeyShard = writeEdgeShardStrategy
-                .getWriteShards( scope, targetNodeId, NodeType.TARGET, timestamp, type, sourceNodeType );
-
-        final MultiTennantColumnFamily<ApplicationScope, RowKeyType, DirectedEdge> targetBySourceCf =
-                columnFamilies.getTargetNodeSourceTypeCfName();
-
-
-        for ( Shard shard : targetWithTypeRowKeyShard.getEntries() ) {
-
-            final long shardId = shard.getShardIndex();
-
-            final RowKeyType targetRowKeyType = new RowKeyType( targetNodeId, type, sourceNodeId, shardId );
-
-
-            op.writeEdge( targetBySourceCf, targetRowKeyType, targetEdge );
-            op.countEdge( targetNodeId, NodeType.TARGET, shardId, type, sourceNodeType );
-        }
+//        for ( Shard shard : sourceRowKeyShard.getEntries() ) {
+//
+//            final long shardId = shard.getShardIndex();
+//            final RowKey sourceRowKey = new RowKey( sourceNodeId, type, shardId );
+//            op.writeEdge( sourceCf, sourceRowKey, sourceEdge );
+//            op.countEdge( sourceNodeId, NodeType.SOURCE, shardId, type );
+//        }
+//
+//
+//        final ShardEntryGroup sourceWithTypeRowKeyShard = writeEdgeShardStrategy
+//                .getWriteShards( scope, sourceNodeId, NodeType.SOURCE, timestamp, type, targetNodeType );
+//
+//        final MultiTennantColumnFamily<ApplicationScope, RowKeyType, DirectedEdge> targetCf =
+//                columnFamilies.getSourceNodeTargetTypeCfName();
+//
+//        for ( Shard shard : sourceWithTypeRowKeyShard.getEntries() ) {
+//
+//            final long shardId = shard.getShardIndex();
+//            final RowKeyType sourceRowKeyType = new RowKeyType( sourceNodeId, type, targetNodeId, shardId );
+//
+//            op.writeEdge( targetCf, sourceRowKeyType, sourceEdge );
+//            op.countEdge( sourceNodeId, NodeType.SOURCE, shardId, type, targetNodeType );
+//        }
+//
+//
+//        /**
+//         * write edges from target<-source
+//         */
+//
+//        final DirectedEdge targetEdge = new DirectedEdge( sourceNodeId, timestamp );
+//
+//
+//        final ShardEntryGroup targetRowKeyShard =
+//                writeEdgeShardStrategy.getWriteShards( scope, targetNodeId, NodeType.TARGET, timestamp, type );
+//
+//        final MultiTennantColumnFamily<ApplicationScope, RowKey, DirectedEdge> sourceByTargetCf =
+//                columnFamilies.getTargetNodeCfName();
+//
+//        for ( Shard shard : targetRowKeyShard.getEntries() ) {
+//            final long shardId = shard.getShardIndex();
+//            final RowKey targetRowKey = new RowKey( targetNodeId, type, shardId );
+//
+//            op.writeEdge( sourceByTargetCf, targetRowKey, targetEdge );
+//            op.countEdge( targetNodeId, NodeType.TARGET, shardId, type );
+//        }
+//
+//
+//        final ShardEntryGroup targetWithTypeRowKeyShard = writeEdgeShardStrategy
+//                .getWriteShards( scope, targetNodeId, NodeType.TARGET, timestamp, type, sourceNodeType );
+//
+//        final MultiTennantColumnFamily<ApplicationScope, RowKeyType, DirectedEdge> targetBySourceCf =
+//                columnFamilies.getTargetNodeSourceTypeCfName();
+//
+//
+//        for ( Shard shard : targetWithTypeRowKeyShard.getEntries() ) {
+//
+//            final long shardId = shard.getShardIndex();
+//
+//            final RowKeyType targetRowKeyType = new RowKeyType( targetNodeId, type, sourceNodeId, shardId );
+//
+//
+//            op.writeEdge( targetBySourceCf, targetRowKeyType, targetEdge );
+//            op.countEdge( targetNodeId, NodeType.TARGET, shardId, type, sourceNodeType );
+//        }
 
         /**
          * Always a 0l shard, we're hard limiting 2b timestamps for the same edge
@@ -287,7 +287,7 @@ public class ShardedEdgeSerializationImpl implements ShardedEdgeSerialization {
 
     @Override
     public Iterator<MarkedEdge> getEdgeVersions( final EdgeColumnFamilies columnFamilies, final ApplicationScope scope,
-                                                 final SearchByEdge search, final Iterator<ShardEntries> shards ) {
+                                                 final SearchByEdge search, final Iterator<ShardEntryGroup> shards ) {
         ValidationUtils.validateApplicationScope( scope );
         EdgeUtils.validateSearchByEdge( search );
 
@@ -348,7 +348,7 @@ public class ShardedEdgeSerializationImpl implements ShardedEdgeSerialization {
     @Override
     public Iterator<MarkedEdge> getEdgesFromSource( final EdgeColumnFamilies columnFamilies,
                                                     final ApplicationScope scope, final SearchByEdgeType edgeType,
-                                                    final Iterator<ShardEntries> shards ) {
+                                                    final Iterator<ShardEntryGroup> shards ) {
 
         ValidationUtils.validateApplicationScope( scope );
         EdgeUtils.validateSearchByEdgeType( edgeType );
@@ -399,7 +399,7 @@ public class ShardedEdgeSerializationImpl implements ShardedEdgeSerialization {
     public Iterator<MarkedEdge> getEdgesFromSourceByTargetType( final EdgeColumnFamilies columnFamilies,
                                                                 final ApplicationScope scope,
                                                                 final SearchByIdType edgeType,
-                                                                final Iterator<ShardEntries> shards ) {
+                                                                final Iterator<ShardEntryGroup> shards ) {
 
         ValidationUtils.validateApplicationScope( scope );
         EdgeUtils.validateSearchByEdgeType( edgeType );
@@ -448,7 +448,7 @@ public class ShardedEdgeSerializationImpl implements ShardedEdgeSerialization {
     @Override
     public Iterator<MarkedEdge> getEdgesToTarget( final EdgeColumnFamilies columnFamilies, final ApplicationScope scope,
                                                   final SearchByEdgeType edgeType,
-                                                  final Iterator<ShardEntries> shards ) {
+                                                  final Iterator<ShardEntryGroup> shards ) {
         ValidationUtils.validateApplicationScope( scope );
         EdgeUtils.validateSearchByEdgeType( edgeType );
 
@@ -496,7 +496,7 @@ public class ShardedEdgeSerializationImpl implements ShardedEdgeSerialization {
     public Iterator<MarkedEdge> getEdgesToTargetBySourceType( final EdgeColumnFamilies columnFamilies,
                                                               final ApplicationScope scope,
                                                               final SearchByIdType edgeType,
-                                                              final Iterator<ShardEntries> shards ) {
+                                                              final Iterator<ShardEntryGroup> shards ) {
 
         ValidationUtils.validateApplicationScope( scope );
         EdgeUtils.validateSearchByEdgeType( edgeType );

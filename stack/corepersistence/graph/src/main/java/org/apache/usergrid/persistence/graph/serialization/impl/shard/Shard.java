@@ -47,6 +47,11 @@ public class Shard implements Comparable<Shard> {
     }
 
 
+    /**
+     * Compare the shards based on the timestamp first, then the created time second
+     * @param o
+     * @return
+     */
     @Override
     public int compareTo( final Shard o ) {
         if ( o == null ) {

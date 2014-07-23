@@ -21,9 +21,7 @@ package org.apache.usergrid.persistence.graph.serialization.impl.shard;
 
 
 import java.util.Iterator;
-import java.util.UUID;
 
-import org.apache.usergrid.persistence.core.astyanax.MultiTennantColumnFamily;
 import org.apache.usergrid.persistence.core.scope.ApplicationScope;
 import org.apache.usergrid.persistence.model.entity.Id;
 
@@ -39,7 +37,7 @@ public interface EdgeShardStrategy {
      * @param timestamp The timestamp on the edge
      * @param types The types in the edge
      */
-    public ShardEntries getWriteShards( final ApplicationScope scope, final Id rowKeyId,final  NodeType nodeType, final long timestamp,
+    public ShardEntryGroup getWriteShards( final ApplicationScope scope, final Id rowKeyId,final  NodeType nodeType, final long timestamp,
                                            final String... types );
 
 
@@ -52,7 +50,7 @@ public interface EdgeShardStrategy {
      * @param maxTimestamp The max timestamp to use
      * @param types the types in the edge
      */
-    public Iterator<ShardEntries> getReadShards(final ApplicationScope scope,final  Id rowKeyId, final NodeType nodeType,final long maxTimestamp,final  String... types );
+    public Iterator<ShardEntryGroup> getReadShards(final ApplicationScope scope,final  Id rowKeyId, final NodeType nodeType,final long maxTimestamp,final  String... types );
 
     /**
      * Increment our count meta data by the passed value.  Can be a positive or a negative number.

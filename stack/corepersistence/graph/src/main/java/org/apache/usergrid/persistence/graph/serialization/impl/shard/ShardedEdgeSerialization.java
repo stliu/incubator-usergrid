@@ -67,7 +67,7 @@ public interface ShardedEdgeSerialization {
      * @param shards The shards to iterate when searching
      */
     Iterator<MarkedEdge> getEdgeVersions( EdgeColumnFamilies columnFamilies, ApplicationScope scope,
-                                          SearchByEdge search, Iterator<ShardEntries> shards );
+                                          SearchByEdge search, Iterator<ShardEntryGroup> shards );
 
     /**
      * Get an iterator of all edges by edge type originating from source node
@@ -78,7 +78,7 @@ public interface ShardedEdgeSerialization {
      * @param shards The shards to iterate when searching
      */
     Iterator<MarkedEdge> getEdgesFromSource( EdgeColumnFamilies columnFamilies, ApplicationScope scope,
-                                             SearchByEdgeType search, Iterator<ShardEntries> shards );
+                                             SearchByEdgeType search, Iterator<ShardEntryGroup> shards );
 
 
     /**
@@ -90,7 +90,7 @@ public interface ShardedEdgeSerialization {
      * @param shards The shards to iterate when searching
      */
     Iterator<MarkedEdge> getEdgesFromSourceByTargetType( EdgeColumnFamilies columnFamilies, ApplicationScope scope,
-                                                         SearchByIdType search, Iterator<ShardEntries> shards );
+                                                         SearchByIdType search, Iterator<ShardEntryGroup> shards );
 
     /**
      * Get an iterator of all edges by edge type pointing to the target node.  Returns all versions
@@ -101,7 +101,7 @@ public interface ShardedEdgeSerialization {
      * @param shards The shards to iterate when searching
      */
     Iterator<MarkedEdge> getEdgesToTarget( EdgeColumnFamilies columnFamilies, ApplicationScope scope,
-                                           SearchByEdgeType search, Iterator<ShardEntries> shards );
+                                           SearchByEdgeType search, Iterator<ShardEntryGroup> shards );
 
 
     /**
@@ -114,5 +114,5 @@ public interface ShardedEdgeSerialization {
      * @param shards The shards to iterate when searching
      */
     Iterator<MarkedEdge> getEdgesToTargetBySourceType( EdgeColumnFamilies columnFamilies, ApplicationScope scope,
-                                                       SearchByIdType search, Iterator<ShardEntries> shards );
+                                                       SearchByIdType search, Iterator<ShardEntryGroup> shards );
 }

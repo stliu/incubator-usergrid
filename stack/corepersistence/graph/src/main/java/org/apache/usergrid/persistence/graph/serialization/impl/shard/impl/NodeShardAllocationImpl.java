@@ -20,40 +20,33 @@
 package org.apache.usergrid.persistence.graph.serialization.impl.shard.impl;
 
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
-import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.commons.collections4.iterators.PushbackIterator;
-
 import org.apache.usergrid.persistence.core.consistency.TimeService;
 import org.apache.usergrid.persistence.core.scope.ApplicationScope;
-import org.apache.usergrid.persistence.graph.Edge;
 import org.apache.usergrid.persistence.graph.GraphFig;
 import org.apache.usergrid.persistence.graph.MarkedEdge;
 import org.apache.usergrid.persistence.graph.exception.GraphRuntimeException;
 import org.apache.usergrid.persistence.graph.impl.SimpleSearchByEdgeType;
 import org.apache.usergrid.persistence.graph.impl.SimpleSearchByIdType;
-import org.apache.usergrid.persistence.graph.serialization.EdgeSerialization;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.EdgeColumnFamilies;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.EdgeShardSerialization;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeShardAllocation;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeShardApproximation;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.NodeType;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.Shard;
-import org.apache.usergrid.persistence.graph.serialization.impl.shard.ShardEntries;
+import org.apache.usergrid.persistence.graph.serialization.impl.shard.ShardEntryGroup;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.ShardedEdgeSerialization;
 import org.apache.usergrid.persistence.model.entity.Id;
 
 import com.google.common.base.Optional;
 import com.google.inject.Inject;
 import com.netflix.astyanax.Keyspace;
-import com.netflix.astyanax.MutationBatch;
 import com.netflix.astyanax.connectionpool.exceptions.ConnectionException;
 
 
@@ -63,9 +56,7 @@ import com.netflix.astyanax.connectionpool.exceptions.ConnectionException;
 public class NodeShardAllocationImpl implements NodeShardAllocation {
 
 
-    private static final Logger LOG = LoggerFactory.getLogger(NodeShardAllocationImpl.class);
-
-    private static final MinShardTimeComparator MIN_SHARD_TIME_COMPARATOR = new MinShardTimeComparator();
+    private static final Logger LOG = LoggerFactory.getLogger( NodeShardAllocationImpl.class );
 
     private final EdgeShardSerialization edgeShardSerialization;
     private final EdgeColumnFamilies edgeColumnFamilies;
@@ -93,79 +84,13 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
 
 
     @Override
-    public Iterator<Shard> getShards( final ApplicationScope scope, final Id nodeId, final NodeType nodeType,
-                                      final Optional<Shard> maxShardId, final String... edgeTypes ) {
+    public Iterator<ShardEntryGroup> getShards( final ApplicationScope scope, final Id nodeId, final NodeType nodeType,
+                                                final Optional<Shard> maxShardId, final String... edgeTypes ) {
 
         final Iterator<Shard> existingShards =
                 edgeShardSerialization.getEdgeMetaData( scope, nodeId, nodeType, maxShardId, edgeTypes );
 
-        final PushbackIterator<Shard> pushbackIterator = new PushbackIterator( existingShards );
-
-
-        final long minConflictTime = getMinTime();
-
-
-        final List<Shard> futures = new ArrayList<>();
-
-
-        //loop through all shards, any shard > now+1 should be deleted
-        while ( pushbackIterator.hasNext() ) {
-
-            final Shard shard = pushbackIterator.next();
-
-            //we're done, our current time uuid is greater than the value stored
-            if ( shard.getCreatedTime() < minConflictTime ) {
-                //push it back into the iterator
-                pushbackIterator.pushback( shard );
-                break;
-            }
-
-            futures.add( shard );
-        }
-
-
-        //clean up our future
-        Collections.sort( futures, MIN_SHARD_TIME_COMPARATOR );
-
-
-        //we have more than 1 future value, we need to remove it
-
-        MutationBatch cleanup = keyspace.prepareMutationBatch();
-
-        //remove all futures except the last one, it is the only value we shouldn't lazy remove
-        for ( int i = 1; i < futures.size(); i++ ) {
-            final Shard toRemove = futures.get( i );
-
-            final MutationBatch batch = edgeShardSerialization
-                    .removeEdgeMeta( scope, nodeId, nodeType, toRemove.getShardIndex(), edgeTypes );
-
-            cleanup.mergeShallow( batch );
-        }
-
-
-        try {
-            cleanup.execute();
-        }
-        catch ( ConnectionException e ) {
-            throw new GraphRuntimeException( "Unable to remove future shards, mutation error", e );
-        }
-
-
-        final int futuresSize = futures.size();
-
-        if ( futuresSize > 0 ) {
-            pushbackIterator.pushback( futures.get( 0 ) );
-        }
-
-
-        /**
-         * Nothing to iterate, return an iterator with 0.
-         */
-        if ( !pushbackIterator.hasNext() ) {
-            pushbackIterator.pushback( new Shard( 0l, 0l ) );
-        }
-
-        return pushbackIterator;
+        return new ShardEntryGroupIterator( existingShards, graphFig.getShardMinDelta() );
     }
 
 
@@ -173,8 +98,13 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
     public boolean auditMaxShard( final ApplicationScope scope, final Id nodeId, final NodeType nodeType,
                                   final String... edgeType ) {
 
-        final Iterator<Shard> maxShards =  edgeShardSerialization.getEdgeMetaData( scope, nodeId, nodeType, Optional.<Shard>absent(), edgeType );
-
+        /**
+         * TODO, we should change this to seek the shard based on a value. This way we can always split any shard,
+         * not just the
+         * latest
+         */
+        final Iterator<Shard> maxShards =
+                edgeShardSerialization.getEdgeMetaData( scope, nodeId, nodeType, Optional.<Shard>absent(), edgeType );
 
 
         //if the first shard has already been allocated, do nothing.
@@ -187,21 +117,21 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
         final Shard maxShard = maxShards.next();
 
 
-
         /**
          * Nothing to do, it's been created very recently, we don't create a new one
          */
-        if(maxShard.getCreatedTime() >= getMinTime()){
+        if ( maxShard.getCreatedTime() >= getMinTime() ) {
             return false;
         }
 
 
         /**
-        * Check out if we have a count for our shard allocation
-        */
+         * Check out if we have a count for our shard allocation
+         */
 
         final long count =
                 nodeShardApproximation.getCount( scope, nodeId, nodeType, maxShard.getShardIndex(), edgeType );
+
 
         if ( count < graphFig.getShardSize() ) {
             return false;
@@ -214,41 +144,57 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
 
         Iterator<MarkedEdge> edges;
 
+        final long delta = graphFig.getShardMinDelta();
+
+        final ShardEntryGroup shardEntryGroup = new ShardEntryGroup( delta );
+        shardEntryGroup.addShard( maxShard );
+
+        final Iterator<ShardEntryGroup> shardEntryGroupIterator = Collections.singleton( shardEntryGroup ).iterator();
+
         /**
          * This is fugly, I think our allocation interface needs to get more declarative
          */
-        if(nodeType == NodeType.SOURCE){
+        if ( nodeType == NodeType.SOURCE ) {
 
-            if(edgeType.length == 1){
-                edges = shardedEdgeSerialization.getEdgesFromSource(edgeColumnFamilies, scope, new SimpleSearchByEdgeType( nodeId,  edgeType[0], Long.MAX_VALUE, null), Collections.singleton( new ShardEntries(Collections.singleton( maxShard ))).iterator()) ;
+            if ( edgeType.length == 1 ) {
+                edges = shardedEdgeSerialization.getEdgesFromSource( edgeColumnFamilies, scope,
+                        new SimpleSearchByEdgeType( nodeId, edgeType[0], Long.MAX_VALUE, null ),
+                        shardEntryGroupIterator );
             }
 
-            else if(edgeType.length == 2){
-                edges = shardedEdgeSerialization.getEdgesFromSourceByTargetType(edgeColumnFamilies, scope, new SimpleSearchByIdType( nodeId,  edgeType[0], Long.MAX_VALUE,  edgeType[1], null), Collections.singleton( new ShardEntries(Collections.singleton( maxShard ))).iterator());
+            else if ( edgeType.length == 2 ) {
+                edges = shardedEdgeSerialization.getEdgesFromSourceByTargetType( edgeColumnFamilies, scope,
+                        new SimpleSearchByIdType( nodeId, edgeType[0], Long.MAX_VALUE, edgeType[1], null ),
+                        shardEntryGroupIterator );
             }
 
-           else{
+            else {
                 throw new UnsupportedOperationException( "More than 2 edge types aren't supported" );
             }
+        }
+        else {
 
-        }    else{
-
-            if(edgeType.length == 1){
-                edges = shardedEdgeSerialization.getEdgesToTarget(edgeColumnFamilies, scope, new SimpleSearchByEdgeType( nodeId,  edgeType[0], Long.MAX_VALUE, null), Collections.singleton( new ShardEntries(Collections.singleton( maxShard ))).iterator()) ;
+            if ( edgeType.length == 1 ) {
+                edges = shardedEdgeSerialization.getEdgesToTarget( edgeColumnFamilies, scope,
+                        new SimpleSearchByEdgeType( nodeId, edgeType[0], Long.MAX_VALUE, null ),
+                        shardEntryGroupIterator );
             }
 
-            else if(edgeType.length == 2){
-                edges = shardedEdgeSerialization.getEdgesToTargetBySourceType(edgeColumnFamilies, scope, new SimpleSearchByIdType( nodeId,  edgeType[0], Long.MAX_VALUE,  edgeType[1], null), Collections.singleton( new ShardEntries(Collections.singleton( maxShard ))).iterator());
+            else if ( edgeType.length == 2 ) {
+                edges = shardedEdgeSerialization.getEdgesToTargetBySourceType( edgeColumnFamilies, scope,
+                        new SimpleSearchByIdType( nodeId, edgeType[0], Long.MAX_VALUE, edgeType[1], null ),
+                        shardEntryGroupIterator );
             }
 
-           else{
+            else {
                 throw new UnsupportedOperationException( "More than 2 edge types aren't supported" );
             }
         }
 
 
-        if(!edges.hasNext()){
-            LOG.warn( "Tried to allocate a new shard for node id {} with edge types {}, but no max value could be found in that row", nodeId, edgeType );
+        if ( !edges.hasNext() ) {
+            LOG.warn( "Tried to allocate a new shard for node id {} with edge types {}, "
+                    + "but no max value could be found in that row", nodeId, edgeType );
             return false;
         }
 
@@ -260,12 +206,13 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
 
 
         try {
-            this.edgeShardSerialization.writeEdgeMeta( scope, nodeId, nodeType,  marked.getTimestamp(), createTimestamp, edgeType ).execute();
+            this.edgeShardSerialization
+                    .writeEdgeMeta( scope, nodeId, nodeType, marked.getTimestamp(), createTimestamp, edgeType )
+                    .execute();
         }
         catch ( ConnectionException e ) {
             throw new GraphRuntimeException( "Unable to write the new edge metadata" );
         }
-
 
 
         return true;
@@ -274,7 +221,19 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
 
     @Override
     public long getMinTime() {
-        return timeService.getCurrentTime() - ( 2 * graphFig.getShardCacheTimeout() );
+
+        final long minimumAllowed = 2 * graphFig.getShardCacheTimeout();
+
+        final long minDelta = graphFig.getShardMinDelta();
+
+
+        if ( minDelta < minimumAllowed ) {
+            throw new GraphRuntimeException( String.format(
+                    "You must configure the property %s to be >= 2 x %s.  Otherwise you risk losing data",
+                    GraphFig.SHARD_MIN_DELTA, GraphFig.SHARD_CACHE_TIMEOUT ) );
+        }
+
+        return timeService.getCurrentTime() - minDelta;
     }
 
 
@@ -294,6 +253,4 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
             return result;
         }
     }
-
-
 }

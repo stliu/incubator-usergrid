@@ -7,7 +7,7 @@ import org.apache.usergrid.persistence.core.astyanax.ColumnParser;
 import org.apache.usergrid.persistence.core.astyanax.ScopedRowKey;
 import org.apache.usergrid.persistence.core.scope.ApplicationScope;
 import org.apache.usergrid.persistence.graph.Edge;
-import org.apache.usergrid.persistence.graph.serialization.impl.shard.ShardEntries;
+import org.apache.usergrid.persistence.graph.serialization.impl.shard.ShardEntryGroup;
 
 import com.google.common.base.Optional;
 import com.netflix.astyanax.Serializer;
@@ -28,11 +28,11 @@ public abstract class EdgeSearcher<R, C, T> implements ColumnParser<C, T>, Itera
     protected final Optional<Edge> last;
     protected final long maxTimestamp;
     protected final ApplicationScope scope;
-    protected final Iterator<ShardEntries> shards;
+    protected final Iterator<ShardEntryGroup> shards;
 
 
     protected EdgeSearcher( final ApplicationScope scope, final long maxTimestamp, final Optional<Edge> last,
-                            final Iterator<ShardEntries> shards ) {
+                            final Iterator<ShardEntryGroup> shards ) {
         this.scope = scope;
         this.maxTimestamp = maxTimestamp;
         this.last = last;
@@ -49,10 +49,10 @@ public abstract class EdgeSearcher<R, C, T> implements ColumnParser<C, T>, Itera
     @Override
     public ScopedRowKey<ApplicationScope, R> next() {
         /**
-         * Todo, multi scan
+         * TODO Shard fix this
          */
         return ScopedRowKey
-                .fromKey( scope, generateRowKey( shards.next().getEntries().iterator().next().getShardIndex() ) );
+                .fromKey( scope, generateRowKey( shards.next().getMergeTarget().getShardIndex() ) );
     }
 
 
