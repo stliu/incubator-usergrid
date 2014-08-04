@@ -21,6 +21,7 @@ package org.apache.usergrid.persistence.graph.serialization.impl.shard;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.TreeSet;
 
 
@@ -38,10 +39,9 @@ public class ShardEntryGroup {
 
     private final long delta;
 
-    private Shard compactionTarget;
-
-
     private long maxCreatedTime;
+
+    private Shard compactionTarget;
 
 
     /**
@@ -100,7 +100,7 @@ public class ShardEntryGroup {
 
 
         //shard is not compacted, or it's predecessor isn't, we should include it in this group
-        if ( !shard.isCompacted() || !shards.last().isCompacted() ) {
+        if ( !shard.isCompacted() || !shards.first().isCompacted() ) {
             addShardInternal( shard );
             return true;
         }
@@ -118,10 +118,8 @@ public class ShardEntryGroup {
 
         maxCreatedTime = Math.max( maxCreatedTime, shard.getCreatedTime() );
 
-        //it's not a compacted shard, so it's a candidate to be the compaction target
-        if ( !shard.isCompacted() && ( compactionTarget == null || shard.compareTo( compactionTarget ) < 0 ) ) {
-            compactionTarget = shard;
-        }
+        //we're changing our structure, unset the compaction target
+        compactionTarget = null;
     }
 
 
@@ -143,7 +141,7 @@ public class ShardEntryGroup {
          * adding data to other shards
          */
         if ( shouldCompact( currentTime ) ) {
-            return Collections.singleton( compactionTarget );
+            return Collections.singleton( getCompactionTarget() );
         }
 
 
@@ -152,9 +150,41 @@ public class ShardEntryGroup {
 
 
     /**
-     * Get the shard all compactions should write to
+     * Get the shard all compactions should write to.  Null indicates we cannot find a shard that could
+     * be used as a compaction target.  Note that this shard may not have surpassed the delta yet
+     * You should invoke "shouldCompact" first to ensure all criteria are met before initiating compaction
      */
     public Shard getCompactionTarget() {
+
+        if(compactionTarget != null){
+            return compactionTarget;
+        }
+
+        //we have < 2 shards, we can't compact
+        if ( shards.size() < 2 ) {
+            return null;
+        }
+
+
+        Iterator<Shard> descendingIterator = shards.iterator();
+
+        //if we don't have a next, or our "lowest" shard can't be compacted we have no nearest neighbor
+        //to use as a bookend.  We can't compact.
+        if(!descendingIterator.hasNext() || !descendingIterator.next().isCompacted()){
+            return null;
+        }
+
+
+
+        //our next should be able to be compacted.
+
+        if(!descendingIterator.hasNext()){
+            return null;
+        }
+
+        //We use this value a lot, cache it
+        compactionTarget = descendingIterator.next();
+
         return compactionTarget;
     }
 
@@ -171,11 +201,15 @@ public class ShardEntryGroup {
         /**
          * We don't have enough shards to compact, ignore
          */
-        if ( shards.size() < 2 ) {
-            return false;
-        }
+        return getCompactionTarget() != null
 
-        return currentTime - delta > maxCreatedTime;
+
+                /**
+                 * If something was created within the delta time frame, not everyone may have seen it due to
+                 * cache refresh, we can't compact yet.
+                 */
+
+                && currentTime - delta > maxCreatedTime;
     }
 
 
@@ -187,7 +221,10 @@ public class ShardEntryGroup {
         //we purposefully use shard index comparison over .equals here, since 2 shards might have the same index with
         // different timestamps
         // (unlikely but could happen)
-        return !shard.isCompacted() && ( compactionTarget != null && compactionTarget.getShardIndex() != shard
-                .getShardIndex() );
+
+        final Shard compactionTarget = getCompactionTarget();
+
+
+        return !shard.isCompacted() && ( compactionTarget != null && compactionTarget.getShardIndex() != shard.getShardIndex() );
     }
 }

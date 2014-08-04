@@ -74,13 +74,55 @@ public class ShardEntryGroupTest {
         assertTrue( " Shard added", result );
 
 
-        assertFalse( "Root shard cannot be deleted", shardEntryGroup.canBeDeleted( firstShard ) );
+        assertFalse( "First shard cannot be deleted", shardEntryGroup.canBeDeleted( firstShard ) );
 
-        assertFalse( "Root shard cannot be deleted", shardEntryGroup.canBeDeleted( secondShard ) );
+        assertFalse( "Second shard cannot be deleted", shardEntryGroup.canBeDeleted( secondShard ) );
 
         assertFalse( "Duplicate shard id cannot be deleted", shardEntryGroup.canBeDeleted( secondShard ) );
 
-        assertEquals( "Same shard for merge target", firstShard, shardEntryGroup.getCompactionTarget() );
+        assertNull( "Can't compact, no min compacted shard present", shardEntryGroup.getCompactionTarget() );
+
+
+        //TODO, should this blow up in general?  We don't have a compacted shard at the lower bounds, which shouldn't be allowed
+
+    }
+
+
+    @Test
+    public void testShardTarget() {
+
+        final long delta = 10000;
+
+        Shard compactedShard = new Shard( 0, 0, true );
+
+        Shard firstShard = new Shard( 1000, 1000, false );
+
+        Shard secondShard = new Shard( 1000, 1001, false );
+
+
+        ShardEntryGroup shardEntryGroup = new ShardEntryGroup( delta );
+
+        boolean result = shardEntryGroup.addShard( compactedShard );
+
+
+        assertTrue( "Shard added", result );
+
+        result = shardEntryGroup.addShard( firstShard );
+
+        assertTrue( "Shard added", result );
+
+        result = shardEntryGroup.addShard( secondShard );
+
+        assertTrue( " Shard added", result );
+
+
+        assertFalse( "First shard cannot be deleted", shardEntryGroup.canBeDeleted( firstShard ) );
+
+        assertFalse( "Second shard cannot be deleted", shardEntryGroup.canBeDeleted( secondShard ) );
+
+        assertFalse( "Duplicate shard id cannot be deleted", shardEntryGroup.canBeDeleted( secondShard ) );
+
+        assertEquals( "Min compaction target found", firstShard, shardEntryGroup.getCompactionTarget() );
 
         //shouldn't return true, since we haven't passed delta time in the second shard
         assertFalse( "Merge cannot be run within min time",
@@ -89,6 +131,11 @@ public class ShardEntryGroupTest {
         //shouldn't return true, since we haven't passed delta time in the second shard
         assertFalse( "Merge cannot be run within min time",
                 shardEntryGroup.shouldCompact( secondShard.getCreatedTime() + delta ) );
+
+        //we haven't passed the delta in the neighbor that would be our source, shard2, we shouldn't return true
+        //we read from shard2 and write to shard1
+        assertFalse( "Merge cannot be run with after min time",
+                shardEntryGroup.shouldCompact( firstShard.getCreatedTime() + delta + 1 ) );
 
         assertTrue( "Merge should be run with after min time",
                 shardEntryGroup.shouldCompact( secondShard.getCreatedTime() + delta + 1 ) );
@@ -162,14 +209,11 @@ public class ShardEntryGroupTest {
         assertTrue( "Shard added", result );
 
 
+        assertTrue( "Shard can be deleted", shardEntryGroup.canBeDeleted( firstShard ) );
 
-        assertFalse( "Shard cannot be deleted", shardEntryGroup.canBeDeleted( firstShard ) );
+        assertFalse( "Compaction shard shard cannot be deleted", shardEntryGroup.canBeDeleted( secondShard ) );
 
-        assertFalse( "Root shard cannot be deleted", shardEntryGroup.canBeDeleted( secondShard ) );
-
-        assertFalse( "Duplicate shard id cannot be deleted", shardEntryGroup.canBeDeleted( secondShard ) );
-
-        assertEquals( "Same shard for merge target", firstShard, shardEntryGroup.getCompactionTarget() );
+        assertEquals( "Same shard for merge target", secondShard, shardEntryGroup.getCompactionTarget() );
 
         //shouldn't return true, since we haven't passed delta time in the second shard
         assertFalse( "Merge cannot be run within min time",
@@ -179,9 +223,10 @@ public class ShardEntryGroupTest {
         assertFalse( "Merge cannot be run within min time",
                 shardEntryGroup.shouldCompact( secondShard.getCreatedTime() + delta ) );
 
-        assertTrue( "Merge should be run with after min time",
-                shardEntryGroup.shouldCompact( secondShard.getCreatedTime() + delta + 1 ) );
 
+        assertFalse( "Merge cannot be run within min time", shardEntryGroup.shouldCompact( secondShard.getCreatedTime() + delta + 1 ) );
+
+        assertTrue( "Merge should be run with after min time", shardEntryGroup.shouldCompact( firstShard.getCreatedTime() + delta + 1 ) );
     }
 }
 
