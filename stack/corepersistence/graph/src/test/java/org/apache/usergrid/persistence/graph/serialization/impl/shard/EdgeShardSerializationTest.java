@@ -109,33 +109,13 @@ public class EdgeShardSerializationTest {
         Iterator<Shard> results =
                 edgeShardSerialization.getShardMetaData( scope, now, NodeType.SOURCE, Optional.<Shard>absent(), types );
 
-        Shard next = results.next();
 
-        assertEquals( shard3, next.getShardIndex() );
+        assertEquals( shard3, results.next() );
 
-        assertEquals( shard3.getCreatedTime(), next.getCreatedTime() );
+        assertEquals( shard2, results.next() );
 
-        assertEquals( shard3.isCompacted(), next.isCompacted() );
+        assertEquals( shard1, results.next() );
 
-
-        next = results.next();
-
-
-        assertEquals( shard2, next.getShardIndex() );
-
-        assertEquals( shard2.getCreatedTime(), next.getCreatedTime() );
-
-        assertEquals( shard2.isCompacted(), next.isCompacted() );
-
-
-        next = results.next();
-
-
-        assertEquals( shard1, next.getShardIndex() );
-
-        assertEquals( shard1.getCreatedTime(), next.getCreatedTime() );
-
-        assertEquals( shard1.isCompacted(), next.isCompacted() );
 
         assertFalse( results.hasNext() );
 
@@ -149,24 +129,10 @@ public class EdgeShardSerializationTest {
         //test paging and size
         results = edgeShardSerialization.getShardMetaData( scope, now, NodeType.SOURCE, Optional.of( shard2 ), types );
 
-        next = results.next();
+        assertEquals( shard2, results.next() );
 
 
-        assertEquals( shard2, next.getShardIndex() );
-
-        assertEquals( shard2.getCreatedTime(), next.getCreatedTime() );
-
-        assertEquals( shard2.isCompacted(), next.isCompacted() );
-
-
-        next = results.next();
-
-
-        assertEquals( shard1, next.getShardIndex() );
-
-        assertEquals( shard1.getCreatedTime(), next.getCreatedTime() );
-
-        assertEquals( shard1.isCompacted(), next.isCompacted() );
+        assertEquals( shard1, results.next() );
 
 
         assertFalse( results.hasNext() );
@@ -225,9 +191,9 @@ public class EdgeShardSerializationTest {
         results =
                 edgeShardSerialization.getShardMetaData( scope, now, NodeType.SOURCE, Optional.<Shard>absent(), types );
 
-        assertEquals( shard3, results.next().getShardIndex() );
+        assertEquals( shard3, results.next() );
 
-        assertEquals( shard2, results.next().getShardIndex() );
+        assertEquals( shard2, results.next() );
 
         assertFalse( results.hasNext() );
 

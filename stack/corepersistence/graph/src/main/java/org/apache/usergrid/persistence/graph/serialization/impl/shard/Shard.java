@@ -103,12 +103,15 @@ public class Shard implements Comparable<Shard> {
         if ( this == o ) {
             return true;
         }
-        if ( !( o instanceof Shard ) ) {
+        if ( o == null || getClass() != o.getClass() ) {
             return false;
         }
 
         final Shard shard = ( Shard ) o;
 
+        if ( compacted != shard.compacted ) {
+            return false;
+        }
         if ( createdTime != shard.createdTime ) {
             return false;
         }
@@ -124,6 +127,7 @@ public class Shard implements Comparable<Shard> {
     public int hashCode() {
         int result = ( int ) ( shardIndex ^ ( shardIndex >>> 32 ) );
         result = 31 * result + ( int ) ( createdTime ^ ( createdTime >>> 32 ) );
+        result = 31 * result + ( compacted ? 1 : 0 );
         return result;
     }
 

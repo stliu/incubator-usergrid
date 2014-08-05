@@ -40,7 +40,7 @@ import rx.Observable;
  */
 @RunWith(ITRunner.class)
 @UseModules({ TestGraphModule.class })
-public class ComittedGraphManagerIT extends GraphManagerIT {
+public class CommittedGraphManagerIT extends GraphManagerIT {
 
 
     @Override

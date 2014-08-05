@@ -29,6 +29,7 @@ import javax.inject.Inject;
 import org.apache.usergrid.persistence.core.astyanax.CassandraConfig;
 import org.apache.usergrid.persistence.core.astyanax.MultiTennantColumnFamily;
 import org.apache.usergrid.persistence.core.astyanax.ScopedRowKey;
+import org.apache.usergrid.persistence.core.consistency.TimeService;
 import org.apache.usergrid.persistence.core.scope.ApplicationScope;
 import org.apache.usergrid.persistence.core.util.ValidationUtils;
 import org.apache.usergrid.persistence.graph.Edge;
@@ -67,22 +68,27 @@ public class ShardedEdgeSerializationImpl implements ShardedEdgeSerialization {
     protected final CassandraConfig cassandraConfig;
     protected final GraphFig graphFig;
     protected final EdgeShardStrategy writeEdgeShardStrategy;
+    protected final TimeService timeService;
 
 
     @Inject
     public ShardedEdgeSerializationImpl( final Keyspace keyspace, final CassandraConfig cassandraConfig,
-                                         final GraphFig graphFig, final EdgeShardStrategy writeEdgeShardStrategy ) {
+                                         final GraphFig graphFig, final EdgeShardStrategy writeEdgeShardStrategy,
+                                         final TimeService timeService ) {
+
 
         checkNotNull( "keyspace required", keyspace );
         checkNotNull( "cassandraConfig required", cassandraConfig );
         checkNotNull( "consistencyFig required", graphFig );
         checkNotNull( "writeEdgeShardStrategy required", writeEdgeShardStrategy );
+        checkNotNull( "timeService required", timeService );
 
 
         this.keyspace = keyspace;
         this.cassandraConfig = cassandraConfig;
         this.graphFig = graphFig;
         this.writeEdgeShardStrategy = writeEdgeShardStrategy;
+        this.timeService = timeService;
     }
 
 
@@ -198,6 +204,8 @@ public class ShardedEdgeSerializationImpl implements ShardedEdgeSerialization {
          */
 
 
+        final long time = timeService.getCurrentTime();
+
         final DirectedEdge sourceEdge = new DirectedEdge( targetNodeId, timestamp );
 
         final ShardEntryGroup sourceRowKeyShard =
@@ -207,70 +215,70 @@ public class ShardedEdgeSerializationImpl implements ShardedEdgeSerialization {
                 columnFamilies.getSourceNodeCfName();
 
 
-//        for ( Shard shard : sourceRowKeyShard.getEntries() ) {
-//
-//            final long shardId = shard.getShardIndex();
-//            final RowKey sourceRowKey = new RowKey( sourceNodeId, type, shardId );
-//            op.writeEdge( sourceCf, sourceRowKey, sourceEdge );
-//            op.countEdge( sourceNodeId, NodeType.SOURCE, shardId, type );
-//        }
-//
-//
-//        final ShardEntryGroup sourceWithTypeRowKeyShard = writeEdgeShardStrategy
-//                .getWriteShards( scope, sourceNodeId, NodeType.SOURCE, timestamp, type, targetNodeType );
-//
-//        final MultiTennantColumnFamily<ApplicationScope, RowKeyType, DirectedEdge> targetCf =
-//                columnFamilies.getSourceNodeTargetTypeCfName();
-//
-//        for ( Shard shard : sourceWithTypeRowKeyShard.getEntries() ) {
-//
-//            final long shardId = shard.getShardIndex();
-//            final RowKeyType sourceRowKeyType = new RowKeyType( sourceNodeId, type, targetNodeId, shardId );
-//
-//            op.writeEdge( targetCf, sourceRowKeyType, sourceEdge );
-//            op.countEdge( sourceNodeId, NodeType.SOURCE, shardId, type, targetNodeType );
-//        }
-//
-//
-//        /**
-//         * write edges from target<-source
-//         */
-//
-//        final DirectedEdge targetEdge = new DirectedEdge( sourceNodeId, timestamp );
-//
-//
-//        final ShardEntryGroup targetRowKeyShard =
-//                writeEdgeShardStrategy.getWriteShards( scope, targetNodeId, NodeType.TARGET, timestamp, type );
-//
-//        final MultiTennantColumnFamily<ApplicationScope, RowKey, DirectedEdge> sourceByTargetCf =
-//                columnFamilies.getTargetNodeCfName();
-//
-//        for ( Shard shard : targetRowKeyShard.getEntries() ) {
-//            final long shardId = shard.getShardIndex();
-//            final RowKey targetRowKey = new RowKey( targetNodeId, type, shardId );
-//
-//            op.writeEdge( sourceByTargetCf, targetRowKey, targetEdge );
-//            op.countEdge( targetNodeId, NodeType.TARGET, shardId, type );
-//        }
-//
-//
-//        final ShardEntryGroup targetWithTypeRowKeyShard = writeEdgeShardStrategy
-//                .getWriteShards( scope, targetNodeId, NodeType.TARGET, timestamp, type, sourceNodeType );
-//
-//        final MultiTennantColumnFamily<ApplicationScope, RowKeyType, DirectedEdge> targetBySourceCf =
-//                columnFamilies.getTargetNodeSourceTypeCfName();
-//
-//
-//        for ( Shard shard : targetWithTypeRowKeyShard.getEntries() ) {
-//
-//            final long shardId = shard.getShardIndex();
-//
-//            final RowKeyType targetRowKeyType = new RowKeyType( targetNodeId, type, sourceNodeId, shardId );
-//
-//
-//            op.writeEdge( targetBySourceCf, targetRowKeyType, targetEdge );
-//            op.countEdge( targetNodeId, NodeType.TARGET, shardId, type, sourceNodeType );
-//        }
+        for ( Shard shard : sourceRowKeyShard.getWriteShards(time) ) {
+
+            final long shardId = shard.getShardIndex();
+            final RowKey sourceRowKey = new RowKey( sourceNodeId, type, shardId );
+            op.writeEdge( sourceCf, sourceRowKey, sourceEdge );
+            op.countEdge( sourceNodeId, NodeType.SOURCE, shardId, type );
+        }
+
+
+        final ShardEntryGroup sourceWithTypeRowKeyShard = writeEdgeShardStrategy
+                .getWriteShards( scope, sourceNodeId, NodeType.SOURCE, timestamp, type, targetNodeType );
+
+        final MultiTennantColumnFamily<ApplicationScope, RowKeyType, DirectedEdge> targetCf =
+                columnFamilies.getSourceNodeTargetTypeCfName();
+
+        for ( Shard shard : sourceWithTypeRowKeyShard.getWriteShards(time) ) {
+
+            final long shardId = shard.getShardIndex();
+            final RowKeyType sourceRowKeyType = new RowKeyType( sourceNodeId, type, targetNodeId, shardId );
+
+            op.writeEdge( targetCf, sourceRowKeyType, sourceEdge );
+            op.countEdge( sourceNodeId, NodeType.SOURCE, shardId, type, targetNodeType );
+        }
+
+
+        /**
+         * write edges from target<-source
+         */
+
+        final DirectedEdge targetEdge = new DirectedEdge( sourceNodeId, timestamp );
+
+
+        final ShardEntryGroup targetRowKeyShard =
+                writeEdgeShardStrategy.getWriteShards( scope, targetNodeId, NodeType.TARGET, timestamp, type );
+
+        final MultiTennantColumnFamily<ApplicationScope, RowKey, DirectedEdge> sourceByTargetCf =
+                columnFamilies.getTargetNodeCfName();
+
+        for ( Shard shard : targetRowKeyShard.getWriteShards(time) ) {
+            final long shardId = shard.getShardIndex();
+            final RowKey targetRowKey = new RowKey( targetNodeId, type, shardId );
+
+            op.writeEdge( sourceByTargetCf, targetRowKey, targetEdge );
+            op.countEdge( targetNodeId, NodeType.TARGET, shardId, type );
+        }
+
+
+        final ShardEntryGroup targetWithTypeRowKeyShard = writeEdgeShardStrategy
+                .getWriteShards( scope, targetNodeId, NodeType.TARGET, timestamp, type, sourceNodeType );
+
+        final MultiTennantColumnFamily<ApplicationScope, RowKeyType, DirectedEdge> targetBySourceCf =
+                columnFamilies.getTargetNodeSourceTypeCfName();
+
+
+        for ( Shard shard : targetWithTypeRowKeyShard.getWriteShards(time) ) {
+
+            final long shardId = shard.getShardIndex();
+
+            final RowKeyType targetRowKeyType = new RowKeyType( targetNodeId, type, sourceNodeId, shardId );
+
+
+            op.writeEdge( targetBySourceCf, targetRowKeyType, targetEdge );
+            op.countEdge( targetNodeId, NodeType.TARGET, shardId, type, sourceNodeType );
+        }
 
         /**
          * Always a 0l shard, we're hard limiting 2b timestamps for the same edge

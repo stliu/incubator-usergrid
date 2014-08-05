@@ -24,11 +24,19 @@ public class ShardEntryGroupIterator implements Iterator<ShardEntryGroup> {
 
     /**
      * Create a shard iterator
-     * @param sourceIterator The iterator of all shards.  Order is expected to be by the  shard index from Long.MAX to Long.MIN
+     * @param shardIterator The iterator of all shards.  Order is expected to be by the  shard index from Long.MAX to Long.MIN
      * @param minDelta The minimum delta we allow to consider shards the same group
      */
-    public ShardEntryGroupIterator( final Iterator<Shard> sourceIterator, final long minDelta ) {
-        this.sourceIterator = new PushbackIterator( sourceIterator );
+    public ShardEntryGroupIterator( final Iterator<Shard> shardIterator, final long minDelta ) {
+        this.sourceIterator = new PushbackIterator( shardIterator );
+
+        /**
+         * If we don't have any shards, we need to push our "MIN" shard into the list
+         */
+        if(!sourceIterator.hasNext()){
+            sourceIterator.pushback( new Shard(0, 0, true) );
+        }
+
         this.minDelta = minDelta;
     }
 
@@ -39,7 +47,7 @@ public class ShardEntryGroupIterator implements Iterator<ShardEntryGroup> {
             advance();
         }
 
-        return next == null;
+        return next != null;
     }
 
 
@@ -69,29 +77,29 @@ public class ShardEntryGroupIterator implements Iterator<ShardEntryGroup> {
      */
     private void advance() {
 
-
-        final ShardEntryGroup shardEntryGroup = new ShardEntryGroup( minDelta );
-
-
         /**
          * We loop through until we've exhausted our source, or we have 2 elements, which means
          * they're > min time allocation from one another
          */
         while ( sourceIterator.hasNext() ) {
 
+            if(next == null){
+                next = new ShardEntryGroup( minDelta );
+            }
 
             final Shard shard = sourceIterator.next();
 
 
             //we can't add this one to the entries, it doesn't fit within the delta, allocate a new one and break
-            if ( shardEntryGroup.addShard( shard ) ) {
+            if ( next.addShard( shard ) ) {
                 continue;
             }
 
-            //we can't add this shard to the current group.  Add the group and return.
-            next = shardEntryGroup;
 
             sourceIterator.pushback( shard );
+            break;
         }
+
+
     }
 }

@@ -151,13 +151,15 @@ public class GraphModule extends AbstractModule {
     public EdgeSerialization storageSerialization( final NodeShardCache cache, final Keyspace keyspace,
                                                    final CassandraConfig cassandraConfig, final GraphFig graphFig,
                                                    final NodeShardApproximation shardApproximation,
+                                                   final TimeService timeService,
                                                    @StorageEdgeSerialization
                                                    final EdgeColumnFamilies edgeColumnFamilies ) {
 
         final EdgeShardStrategy sizeBasedStrategy = new SizebasedEdgeShardStrategy( cache, shardApproximation );
 
 
-        final ShardedEdgeSerialization serialization = new ShardedEdgeSerializationImpl(keyspace, cassandraConfig, graphFig, sizeBasedStrategy);
+        final ShardedEdgeSerialization serialization = new ShardedEdgeSerializationImpl(keyspace, cassandraConfig, graphFig, sizeBasedStrategy,
+                timeService );
 
 
         final EdgeSerializationImpl edgeSerialization =

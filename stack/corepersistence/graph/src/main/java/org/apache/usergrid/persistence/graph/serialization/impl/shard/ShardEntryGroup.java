@@ -19,10 +19,14 @@
 package org.apache.usergrid.persistence.graph.serialization.impl.shard;
 
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.TreeSet;
+
+import com.google.common.base.Preconditions;
 
 
 /**
@@ -35,7 +39,7 @@ import java.util.TreeSet;
 public class ShardEntryGroup {
 
 
-    private TreeSet<Shard> shards;
+    private List<Shard> shards;
 
     private final long delta;
 
@@ -48,8 +52,9 @@ public class ShardEntryGroup {
      * The max delta we accept in milliseconds for create time to be considered a member of this group
      */
     public ShardEntryGroup( final long delta ) {
+        Preconditions.checkArgument(delta > 0, "delta must be greater than 0");
         this.delta = delta;
-        this.shards = new TreeSet<>();
+        this.shards = new ArrayList<>();
         this.maxCreatedTime = 0;
     }
 
@@ -66,41 +71,21 @@ public class ShardEntryGroup {
      */
     public boolean addShard( final Shard shard ) {
 
-        //shards can be ar
+        Preconditions.checkNotNull( "shard cannot be null", shard );
 
-        //compare the time and see if it falls withing any of the elements based on their timestamp
-        //        final long shardCreateTime = shard.getCreatedTime();
+        final int size = shards.size();
 
-        //        final Long lessThanKey = shards.floorKey( shardCreateTime );
-        //
-        //        final Long greaterThanKey = shards.ceilingKey( shardCreateTime );
-        //
-        //        //first into the set
-        //        if ( lessThanKey == null && greaterThanKey == null ) {
-        //            addShardInternal( shard );
-        //            return true;
-        //        }
-        //
-        //        if ( lessThanKey != null && shardCreateTime - lessThanKey < delta ) {
-        //            addShardInternal( shard );
-        //            return true;
-        //        }
-        //
-        //
-        //        if ( greaterThanKey != null && greaterThanKey - shardCreateTime < delta ) {
-        //            addShardInternal( shard );
-        //
-        //            return true;
-        //        }
-
-        if ( shards.size() == 0 ) {
+        if ( size  == 0 ) {
             addShardInternal( shard );
             return true;
         }
 
+        final Shard minShard = shards.get( size -1 );
+
+        Preconditions.checkArgument(minShard.compareTo(shard) > 0, "shard must be less than the current max");
 
         //shard is not compacted, or it's predecessor isn't, we should include it in this group
-        if ( !shard.isCompacted() || !shards.first().isCompacted() ) {
+        if ( !minShard.isCompacted() ) {
             addShardInternal( shard );
             return true;
         }
@@ -140,7 +125,7 @@ public class ShardEntryGroup {
          * The shards in this set can be combined, we should only write to the compaction target to avoid
          * adding data to other shards
          */
-        if ( shouldCompact( currentTime ) ) {
+        if ( !isTooSmallToCompact() && shouldCompact( currentTime ) ) {
             return Collections.singleton( getCompactionTarget() );
         }
 
@@ -160,34 +145,55 @@ public class ShardEntryGroup {
             return compactionTarget;
         }
 
+
         //we have < 2 shards, we can't compact
-        if ( shards.size() < 2 ) {
-            return null;
-        }
-
-
-        Iterator<Shard> descendingIterator = shards.iterator();
-
-        //if we don't have a next, or our "lowest" shard can't be compacted we have no nearest neighbor
-        //to use as a bookend.  We can't compact.
-        if(!descendingIterator.hasNext() || !descendingIterator.next().isCompacted()){
+        if (isTooSmallToCompact()) {
             return null;
         }
 
 
 
-        //our next should be able to be compacted.
+        final int lastIndex = shards.size() -1;
 
-        if(!descendingIterator.hasNext()){
+        final Shard last = shards.get( lastIndex  );
+
+        //Our oldest isn't compacted. As a result we have no "bookend" to delimit this entry group.  Therefore we can't compact
+        if(!last.isCompacted()){
             return null;
         }
 
-        //We use this value a lot, cache it
-        compactionTarget = descendingIterator.next();
+        //Start seeking from the end of our group.  The first shard we encounter that is not compacted is our compaction target
+        //NOTE: This does not mean we can compact, rather it's just an indication that we have a target set.
+        for(int i = lastIndex - 1; i > -1; i --){
+            final Shard compactionCandidate = shards.get( i );
+
+
+            if(!compactionCandidate.isCompacted()){
+                compactionTarget = compactionCandidate;
+                break;
+            }
+
+        }
 
         return compactionTarget;
     }
 
+
+    /**
+     * Return the number of entries in this shard group
+     * @return
+     */
+    public int entrySize(){
+        return shards.size();
+    }
+
+    /**
+     * Return true if there are not enough elements in this entry group to consider compaction
+     * @return
+     */
+    private boolean isTooSmallToCompact(){
+        return shards.size() < 2;
+    }
 
     /**
      * Returns true if the newest created shard is path the currentTime - delta
