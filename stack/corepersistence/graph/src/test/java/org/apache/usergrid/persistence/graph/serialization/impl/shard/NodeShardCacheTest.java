@@ -25,7 +25,10 @@ import java.util.Iterator;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
+import org.apache.usergrid.persistence.core.consistency.TimeService;
 import org.apache.usergrid.persistence.core.scope.ApplicationScope;
 import org.apache.usergrid.persistence.graph.GraphFig;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.impl.NodeShardCacheImpl;
@@ -37,6 +40,9 @@ import com.netflix.astyanax.connectionpool.exceptions.ConnectionException;
 
 import static org.apache.usergrid.persistence.graph.test.util.EdgeTestUtils.createId;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
@@ -65,259 +71,264 @@ public class NodeShardCacheTest {
 
         when( scope.getApplication() ).thenReturn( orgId );
     }
-//
-//
-//    @Test
-//    public void testNoShards() throws ConnectionException {
-//
-//        final GraphFig graphFig = getFigMock();
-//
-//        final NodeShardAllocation allocation = mock( NodeShardAllocation.class );
-//
-//        final Id id = createId( "test" );
-//
-//        final String edgeType = "edge";
-//
-//        final String otherIdType = "type";
-//
-//
-//        final long newTime = 10000l;
-//
-//
-//        NodeShardCache cache = new NodeShardCacheImpl( allocation, graphFig );
-//
-//
-//        final Optional max = Optional.absent();
-//        /**
-//         * Simulate returning no shards at all.
-//         */
-//        when( allocation
-//                .getSourceShards( same( scope ), same( id ), same( max), same( edgeType ),
-//                        same( otherIdType ) ) )
-//                .thenReturn( Collections.singletonList( 0l ).iterator() );
-//
-//
-//        long slice = cache.getSliceShard( scope, id, newTime, edgeType, otherIdType );
-//
-//
-//        //we return the min UUID possible, all edges should start by writing to this edge
-//        assertEquals(0l, slice );
-//
-//
-//        /**
-//         * Verify that we fired the audit
-//         */
-//        verify( allocation ).auditMaxShard( scope, id, edgeType, otherIdType );
-//    }
-//
-//
-//    @Test
-//    public void testSingleExistingShard() {
-//
-//        final GraphFig graphFig = getFigMock();
-//
-//        final NodeShardAllocation allocation = mock( NodeShardAllocation.class );
-//
-//
-//        final Id id = createId( "test" );
-//
-//        final String edgeType = "edge";
-//
-//        final String otherIdType = "type";
-//
-//
-//        final long newTime = 10000l;
-//
-//        final long min = 0;
-//
-//
-//        NodeShardCache cache = new NodeShardCacheImpl( allocation, graphFig );
-//
-//
-//        final Optional max = Optional.absent();
-//
-//        /**
-//         * Simulate returning single shard
-//         */
-//        when( allocation.getSourceShards( same( scope ), same( id ), same(max),
-//                same( edgeType ), same( otherIdType ) ) ).thenReturn( Collections.singletonList( min ).iterator() );
-//
-//
-//        long slice = cache.getSliceShard( scope, id, newTime, edgeType, otherIdType );
-//
-//
-//        //we return the min UUID possible, all edges should start by writing to this edge
-//        assertEquals( min, slice );
-//
-//        /**
-//         * Verify that we fired the audit
-//         */
-//        verify( allocation ).auditMaxShard( scope, id, edgeType, otherIdType );
-//    }
-//
-//
-//    @Test
-//    public void testRangeShard() {
-//
-//        final GraphFig graphFig = getFigMock();
-//
-//        final NodeShardAllocation allocation = mock( NodeShardAllocation.class );
-//
-//        final Id id = createId( "test" );
-//
-//        final String edgeType = "edge";
-//
-//        final String otherIdType = "type";
-//
-//
-//        /**
-//         * Set our min mid and max
-//         */
-//        final long min = 0;
-//
-//
-//        final long mid = 10000;
-//
-//
-//        final long max = 20000;
-//
-//
-//        NodeShardCache cache = new NodeShardCacheImpl( allocation, graphFig );
-//
-//
-//        /**
-//         * Simulate returning all shards
-//         */
-//        when( allocation.getSourceShards( same( scope ), same( id ), any( Optional.class ),
-//                same( edgeType ), same( otherIdType ) ) ).thenReturn( Arrays.asList( min, mid, max ).iterator() );
-//
-//
-//        //check getting equal to our min, mid and max
-//
-//        long slice = cache.getSliceShard( scope, id, min, edgeType, otherIdType );
-//
-//
-//        //we return the min UUID possible, all edges should start by writing to this edge
-//        assertEquals( min, slice );
-//
-//        slice = cache.getSliceShard( scope, id, mid, edgeType, otherIdType );
-//
-//
-//        //we return the mid UUID possible, all edges should start by writing to this edge
-//        assertEquals( mid, slice );
-//
-//        slice = cache.getSliceShard( scope, id, max, edgeType, otherIdType );
-//
-//
-//        //we return the mid UUID possible, all edges should start by writing to this edge
-//        assertEquals( max, slice );
-//
-//        //now test in between
-//        slice = cache.getSliceShard( scope, id, min + 1, edgeType, otherIdType );
-//
-//
-//        //we return the min UUID possible, all edges should start by writing to this edge
-//        assertEquals( min, slice );
-//
-//        slice = cache.getSliceShard( scope, id, mid - 1, edgeType, otherIdType );
-//
-//
-//        //we return the min UUID possible, all edges should start by writing to this edge
-//        assertEquals( min, slice );
-//
-//
-//        slice = cache.getSliceShard( scope, id, mid + 1, edgeType, otherIdType );
-//
-//
-//        //we return the mid UUID possible, all edges should start by writing to this edge
-//        assertEquals( mid, slice );
-//
-//        slice = cache.getSliceShard( scope, id, max - 1, edgeType, otherIdType );
-//
-//
-//        //we return the mid UUID possible, all edges should start by writing to this edge
-//        assertEquals( mid, slice );
-//
-//
-//        slice = cache.getSliceShard( scope, id, max, edgeType, otherIdType );
-//
-//
-//        //we return the mid UUID possible, all edges should start by writing to this edge
-//        assertEquals( max, slice );
-//
-//        /**
-//         * Verify that we fired the audit
-//         */
-//        verify( allocation ).auditMaxShard( scope, id, edgeType, otherIdType );
-//    }
-//
-//
-//    @Test
-//    public void testRangeShardIterator() {
-//
-//        final GraphFig graphFig = getFigMock();
-//
-//        final NodeShardAllocation allocation = mock( NodeShardAllocation.class );
-//
-//        final Id id = createId( "test" );
-//
-//        final String edgeType = "edge";
-//
-//        final String otherIdType = "type";
-//
-//
-//        /**
-//         * Set our min mid and max
-//         */
-//        final long min = 1;
-//
-//
-//        final long mid = 100;
-//
-//
-//        final long max = 200;
-//
-//
-//        NodeShardCache cache = new NodeShardCacheImpl( allocation, graphFig );
-//
-//
-//        /**
-//         * Simulate returning all shards
-//         */
-//        when( allocation.getSourceShards( same( scope ), same( id ),  any(Optional.class),
-//                same( edgeType ), same( otherIdType ) ) ).thenReturn( Arrays.asList( min, mid, max ).iterator() );
-//
-//
-//        //check getting equal to our min, mid and max
-//
-//        Iterator<Long> slice =
-//                cache.getSourceShards( scope, id, max, edgeType, otherIdType );
-//
-//
-//        assertEquals( max, slice.next().longValue() );
-//        assertEquals( mid, slice.next().longValue() );
-//        assertEquals( min, slice.next().longValue() );
-//
-//
-//        slice = cache.getSourceShards( scope, id, mid, edgeType, otherIdType );
-//
-//        assertEquals( mid, slice.next().longValue() );
-//        assertEquals( min, slice.next().longValue() );
-//
-//
-//        slice = cache.getSourceShards( scope, id, min, edgeType, otherIdType );
-//
-//        assertEquals( min, slice.next().longValue() );
-//
-//
-//    }
-//
-//
-//    private GraphFig getFigMock() {
-//        final GraphFig graphFig = mock( GraphFig.class );
-//        when( graphFig.getShardCacheSize() ).thenReturn( 1000l );
-//        when( graphFig.getShardCacheTimeout() ).thenReturn( 30000l );
-//
-//        return graphFig;
-//    }
+
+
+    @Test
+    public void testNoShards() throws ConnectionException {
+
+        final GraphFig graphFig = getFigMock();
+
+        final NodeShardAllocation allocation = mock( NodeShardAllocation.class );
+
+        final TimeService time = mock(TimeService.class);
+
+        final Id id = createId( "test" );
+
+        final String edgeType = "edge";
+
+        final String otherIdType = "type";
+
+
+        final long newTime = 10000l;
+
+
+        NodeShardCache cache = new NodeShardCacheImpl( allocation, graphFig, time );
+
+
+        final Optional max = Optional.absent();
+
+
+        final ShardEntryGroup group = new ShardEntryGroup( newTime );
+        group.addShard( new Shard(0, 0, true) );
+
+
+        /**
+         * Simulate returning no shards at all.
+         */
+        when( allocation.getShards( same( scope ), same( id ), same( NodeType.SOURCE ), same( max ), same( edgeType ),
+                same( otherIdType ) ) )
+
+                //use "thenAnswer" so we always return the value, even if  it's invoked more than 1 time.
+                .thenAnswer( new Answer<Iterator<ShardEntryGroup>>() {
+
+                    @Override
+                    public Iterator<ShardEntryGroup> answer( final InvocationOnMock invocationOnMock )
+                            throws Throwable {
+                        return Collections.singletonList( group ).iterator();
+                    }
+                });
+
+
+        ShardEntryGroup returnedGroup = cache.getWriteShards( scope, id, NodeType.SOURCE, newTime, edgeType, otherIdType );
+
+        //ensure it's the same group
+        assertSame(group, returnedGroup);
+
+
+        Iterator<ShardEntryGroup>
+                shards = cache.getReadShards( scope, id, NodeType.SOURCE, newTime, edgeType, otherIdType );
+
+        assertTrue(shards.hasNext());
+
+
+        returnedGroup = shards.next();
+
+        assertSame("Single shard group expected", group, returnedGroup);
+
+        assertFalse(shards.hasNext());
+
+
+
+
+        //we return the min UUID possible, all edges should start by writing to this edge
+
+        /**
+         * Verify that we fired the audit
+         *
+         * TODO, us the GUAVA Tick to make this happen
+         */
+//        verify(and allocation ).auditMaxShard( scope, id, edgeType, otherIdType );
+    }
+
+
+
+    @Test
+    public void testRangeShard() {
+
+        final GraphFig graphFig = getFigMock();
+
+        final NodeShardAllocation allocation = mock( NodeShardAllocation.class );
+
+        final TimeService time = mock(TimeService.class);
+
+        final Id id = createId( "test" );
+
+        final String edgeType = "edge";
+
+        final String otherIdType = "type";
+
+
+        /**
+         * Set our min mid and max
+         */
+
+        NodeShardCache cache = new NodeShardCacheImpl( allocation, graphFig, time );
+
+
+        final Shard minShard = new Shard(0, 0, true);
+        final Shard midShard = new Shard(10000, 1000, true);
+        final Shard maxShard = new Shard(20000, 2000, true);
+
+
+        /**
+         * Simulate returning all shards
+         */
+        final ShardEntryGroup minShardGroup = new ShardEntryGroup( 10000 );
+        minShardGroup.addShard( minShard );
+
+        final ShardEntryGroup midShardGroup = new ShardEntryGroup( 10000 );
+        midShardGroup.addShard( midShard );
+
+
+        final ShardEntryGroup maxShardGroup = new ShardEntryGroup( 10000 );
+        maxShardGroup.addShard( maxShard );
+
+
+
+
+
+
+        /**
+         * Simulate returning no shards at all.
+         */
+        when( allocation
+                .getShards( same( scope ), same( id ), same( NodeType.TARGET ), any( Optional.class ), same( edgeType ),
+                        same( otherIdType ) ) )
+
+                //use "thenAnswer" so we always return the value, even if  it's invoked more than 1 time.
+                .thenAnswer( new Answer<Iterator<ShardEntryGroup>>(){
+
+                    @Override
+                    public Iterator<ShardEntryGroup> answer( final InvocationOnMock invocationOnMock )
+                            throws Throwable {
+                        return Arrays.asList( maxShardGroup, midShardGroup, minShardGroup ).iterator();
+                    }
+                });
+
+
+        //check getting equal to our min, mid and max
+
+        ShardEntryGroup writeShard  = cache.getWriteShards( scope, id, NodeType.TARGET, minShard.getShardIndex(), edgeType,
+                otherIdType );
+
+        assertSame(minShardGroup, writeShard);
+
+
+        Iterator<ShardEntryGroup>
+                groups = cache.getReadShards( scope, id, NodeType.TARGET, minShard.getShardIndex(), edgeType,
+                otherIdType );
+
+        assertTrue(groups.hasNext());
+
+        assertSame("min shard expected", minShardGroup, groups.next());
+
+        assertFalse(groups.hasNext());
+
+
+
+
+        //mid
+        writeShard = cache.getWriteShards( scope, id, NodeType.TARGET, midShard.getShardIndex(), edgeType, otherIdType );
+
+        assertSame(midShardGroup, writeShard);
+
+
+        groups =  cache.getReadShards( scope, id, NodeType.TARGET, midShard.getShardIndex(), edgeType, otherIdType );
+
+        assertTrue(groups.hasNext());
+
+        assertSame("mid shard expected", midShardGroup, groups.next());
+
+        assertTrue(groups.hasNext());
+
+        assertSame("min shard expected", minShardGroup, groups.next());
+
+        assertFalse(groups.hasNext());
+
+
+
+        //max
+
+        writeShard = cache.getWriteShards( scope, id, NodeType.TARGET, maxShard.getShardIndex(), edgeType, otherIdType );
+
+        assertSame(maxShardGroup, writeShard);
+
+
+        groups =  cache.getReadShards( scope, id, NodeType.TARGET, maxShard.getShardIndex(), edgeType, otherIdType );
+
+        assertTrue(groups.hasNext());
+
+        assertSame("max shard expected", maxShardGroup, groups.next());
+
+        assertTrue(groups.hasNext());
+
+        assertSame("mid shard expected", midShardGroup, groups.next());
+
+
+        assertTrue(groups.hasNext());
+
+        assertSame("min shard expected", minShardGroup, groups.next());
+
+        assertFalse(groups.hasNext());
+
+
+
+        //now test at mid +1 to ensure we get mid + min
+        writeShard = cache.getWriteShards( scope, id, NodeType.TARGET, midShard.getShardIndex()+1, edgeType, otherIdType );
+
+        assertSame(midShardGroup, writeShard);
+
+
+        groups =  cache.getReadShards( scope, id, NodeType.TARGET, midShard.getShardIndex()+1, edgeType, otherIdType );
+
+        assertTrue(groups.hasNext());
+
+        assertSame("mid shard expected", midShardGroup, groups.next());
+
+        assertTrue(groups.hasNext());
+
+        assertSame("min shard expected", minShardGroup, groups.next());
+
+        assertFalse(groups.hasNext());
+
+
+
+        //now test at mid -1 to ensure we get min
+        writeShard = cache.getWriteShards( scope, id, NodeType.TARGET, midShard.getShardIndex() - 1, edgeType, otherIdType );
+
+        assertSame(minShardGroup, writeShard);
+
+
+        groups =  cache.getReadShards( scope, id, NodeType.TARGET, midShard.getShardIndex() - 1, edgeType, otherIdType );
+
+
+        assertTrue(groups.hasNext());
+
+        assertSame("min shard expected", minShardGroup, groups.next());
+
+        assertFalse(groups.hasNext());
+
+    }
+
+
+
+
+
+    private GraphFig getFigMock() {
+        final GraphFig graphFig = mock( GraphFig.class );
+        when( graphFig.getShardCacheSize() ).thenReturn( 1000l );
+        when( graphFig.getShardCacheTimeout() ).thenReturn( 30000l );
+
+        return graphFig;
+    }
 }

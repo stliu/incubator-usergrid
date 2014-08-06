@@ -536,10 +536,9 @@ public class NodeShardAllocationTest {
 
         ShardEntryGroup shardEntryGroup = result.next();
 
-        final Shard expected = new Shard( 0, 0, false );
+        final Shard rootShard = new Shard( 0, 0, true );
 
-        assertEquals( "Future shard returned", expected, shardEntryGroup.getCompactionTarget() );
-
+        assertEquals("Shard size expected", 1, shardEntryGroup.entrySize());
 
         //now verify all 4 are in this group.  This is because the first shard (0,0) (n-1_ may be the only shard other
         //nodes see while we're rolling our state.  This means it should be read and merged from as well
@@ -549,12 +548,12 @@ public class NodeShardAllocationTest {
         Collection<Shard> readShards = shardEntryGroup.getReadShards( );
 
 
-        assertTrue( "0 shard allocated", writeShards.contains( expected ) );
+        assertTrue( "root shard allocated", writeShards.contains( rootShard ) );
 
-        assertTrue( "0 shard allocated", readShards.contains( expected ) );
+        assertTrue( "root shard allocated", readShards.contains( rootShard ) );
 
 
-        assertFalse( "No shard allocated", result.hasNext() );
+        assertFalse( "No other shard group allocated", result.hasNext() );
     }
 
 

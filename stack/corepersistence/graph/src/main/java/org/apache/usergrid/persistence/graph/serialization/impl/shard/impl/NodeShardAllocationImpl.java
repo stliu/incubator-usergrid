@@ -58,6 +58,8 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
 
     private static final Logger LOG = LoggerFactory.getLogger( NodeShardAllocationImpl.class );
 
+    private static final Shard MIN_SHARD = new Shard(0, 0, true);
+
     private final EdgeShardSerialization edgeShardSerialization;
     private final EdgeColumnFamilies edgeColumnFamilies;
     private final ShardedEdgeSerialization shardedEdgeSerialization;
@@ -87,8 +89,20 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
     public Iterator<ShardEntryGroup> getShards( final ApplicationScope scope, final Id nodeId, final NodeType nodeType,
                                                 final Optional<Shard> maxShardId, final String... edgeTypes ) {
 
-        final Iterator<Shard> existingShards =
+        Iterator<Shard> existingShards =
                 edgeShardSerialization.getShardMetaData( scope, nodeId, nodeType, maxShardId, edgeTypes );
+
+        if(!existingShards.hasNext()){
+
+            try {
+                edgeShardSerialization.writeShardMeta( scope, nodeId, nodeType, MIN_SHARD, edgeTypes ).execute();
+            }
+            catch ( ConnectionException e ) {
+                throw new GraphRuntimeException( "Unable to allocate minimum shard" );
+            }
+
+            existingShards = Collections.singleton( MIN_SHARD ).iterator();
+        }
 
         return new ShardEntryGroupIterator( existingShards, graphFig.getShardMinDelta() );
     }

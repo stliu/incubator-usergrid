@@ -29,14 +29,6 @@ public class ShardEntryGroupIterator implements Iterator<ShardEntryGroup> {
      */
     public ShardEntryGroupIterator( final Iterator<Shard> shardIterator, final long minDelta ) {
         this.sourceIterator = new PushbackIterator( shardIterator );
-
-        /**
-         * If we don't have any shards, we need to push our "MIN" shard into the list
-         */
-        if(!sourceIterator.hasNext()){
-            sourceIterator.pushback( new Shard(0, 0, true) );
-        }
-
         this.minDelta = minDelta;
     }
 
