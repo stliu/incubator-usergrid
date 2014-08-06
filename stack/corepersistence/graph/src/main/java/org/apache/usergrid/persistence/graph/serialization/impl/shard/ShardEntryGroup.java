@@ -109,6 +109,20 @@ public class ShardEntryGroup {
 
 
     /**
+     * Return the minum shard based on time indexes
+     * @return
+     */
+    public Shard getMinShard() {
+        final int size = shards.size();
+
+        if(size < 1){
+            return null;
+        }
+
+        return shards.get(size-1);
+    }
+
+    /**
      * Get the entries that we should read from.
      */
     public Collection<Shard> getReadShards() {
@@ -131,6 +145,15 @@ public class ShardEntryGroup {
 
 
         return shards;
+    }
+
+
+    /**
+     * Return true if we have a pending compaction
+     * @return
+     */
+    public boolean isCompactionPending(){
+        return !isTooSmallToCompact();
     }
 
 

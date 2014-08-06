@@ -29,6 +29,7 @@ import java.util.TreeMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.usergrid.persistence.core.consistency.TimeService;
 import org.apache.usergrid.persistence.core.scope.ApplicationScope;
 import org.apache.usergrid.persistence.graph.GraphFig;
 import org.apache.usergrid.persistence.graph.exception.GraphRuntimeException;
@@ -45,6 +46,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import com.google.common.cache.RemovalListener;
+import com.google.common.cache.RemovalNotification;
 import com.google.inject.Inject;
 
 
@@ -56,22 +59,27 @@ public class NodeShardCacheImpl implements NodeShardCache {
 
     private final NodeShardAllocation nodeShardAllocation;
     private final GraphFig graphFig;
+    private final TimeService timeservice;
 
     private LoadingCache<CacheKey, CacheEntry> graphs;
 
 
     /**
-     *
-     * @param nodeShardAllocation
+     *  @param nodeShardAllocation
      * @param graphFig
+     * @param timeservice
      */
     @Inject
-    public NodeShardCacheImpl( final NodeShardAllocation nodeShardAllocation, final GraphFig graphFig ) {
+    public NodeShardCacheImpl( final NodeShardAllocation nodeShardAllocation, final GraphFig graphFig,
+                               final TimeService timeservice ) {
+
         Preconditions.checkNotNull( nodeShardAllocation, "nodeShardAllocation is required" );
         Preconditions.checkNotNull( graphFig, "consistencyFig is required" );
+        Preconditions.checkNotNull( timeservice, "timeservice is required" );
 
         this.nodeShardAllocation = nodeShardAllocation;
         this.graphFig = graphFig;
+        this.timeservice = timeservice;
 
         /**
          * Add our listener to reconstruct the shard
@@ -83,6 +91,7 @@ public class NodeShardCacheImpl implements NodeShardCache {
 
                 if ( propertyName.equals( GraphFig.SHARD_CACHE_SIZE ) || propertyName
                         .equals( GraphFig.SHARD_CACHE_TIMEOUT ) ) {
+
                     updateCache();
                 }
             }
@@ -150,31 +159,18 @@ public class NodeShardCacheImpl implements NodeShardCache {
      */
     private void updateCache() {
 
+        /**
+         * TODO: Validate if we swamp this during a config change it garbage collects properly
+         */
+
+        if(this.graphs != null){
+            this.graphs.invalidateAll();
+        }
+
+
         this.graphs = CacheBuilder.newBuilder().maximumSize( graphFig.getShardCacheSize() )
-                                  .expireAfterWrite( graphFig.getShardCacheSize(), TimeUnit.MILLISECONDS )
-                                  .build( new CacheLoader<CacheKey, CacheEntry>() {
-
-
-                                      @Override
-                                      public CacheEntry load( final CacheKey key ) throws Exception {
-
-
-//                                                                    /**
-//                                                                     * Perform an audit in case we need to allocate a new shard
-//                                                                     */
-//                                                                    nodeShardAllocation.auditMaxShard( key.scope,
-//                                          // key.id, key.types );
-//                                          //                          //TODO, we need to put some sort of upper
-//                                          // bounds on this, it could possibly get too large
-
-
-                                          final Iterator<ShardEntryGroup> edges = nodeShardAllocation
-                                                  .getShards( key.scope, key.id, key.nodeType, Optional.<Shard>absent(),
-                                                          key.types );
-
-                                          return new CacheEntry( edges );
-                                      }
-                                  } );
+                                  .expireAfterWrite( graphFig.getShardCacheSize(), TimeUnit.MILLISECONDS ).removalListener( new ShardRemovalListener() )
+                                  .build( new ShardCacheLoader() );
     }
 
 
@@ -248,8 +244,12 @@ public class NodeShardCacheImpl implements NodeShardCache {
         private CacheEntry( final Iterator<ShardEntryGroup> shards ) {
             this.shards = new TreeMap<>(ShardEntriesComparator.INSTANCE);
 
+            /**
+             * TODO, we need to bound this.  While I don't evision more than a thousand groups max,
+             * we don't want 1 hog all our ram
+             */
             for ( ShardEntryGroup shard : IterableUtil.wrap( shards ) ) {
-                this.shards.put(shard.getCompactionTarget().getShardIndex() , shard );
+                this.shards.put(shard.getMinShard().getShardIndex() , shard );
             }
         }
 
@@ -300,6 +300,78 @@ public class NodeShardCacheImpl implements NodeShardCache {
             public int compare( final Long o1, final Long o2 ) {
                 return Long.compare( o1, o2 ) * -1;
             }
+        }
+
+
+    }
+
+    private final class ShardCacheLoader extends CacheLoader<CacheKey, CacheEntry> {
+
+
+        @Override
+        public CacheEntry load( final CacheKey key ) throws Exception {
+
+
+            //                                                                    /**
+            //                                                                     * Perform an audit in case we need to allocate a new shard
+            //                                                                     */
+            //                                                                    nodeShardAllocation.auditMaxShard( key.scope,
+            //                                          // key.id, key.types );
+            //                                          //                          //TODO, we need to put some sort of upper
+            //                                          // bounds on this, it could possibly get too large
+
+
+            final Iterator<ShardEntryGroup> edges = nodeShardAllocation
+                    .getShards( key.scope, key.id, key.nodeType, Optional.<Shard>absent(),
+                            key.types );
+
+            return new CacheEntry( edges );
+        }
+    }
+
+    private final class ShardRemovalListener implements RemovalListener<CacheKey, CacheEntry>{
+
+        @Override
+        public void onRemoval( final RemovalNotification<CacheKey, CacheEntry> notification ) {
+
+
+
+            CacheKey key = notification.getKey();
+            CacheEntry entry = notification.getValue();
+
+
+            Iterator<ShardEntryGroup> groups = entry.getShards( Long.MAX_VALUE );
+
+
+            /**
+             * Start at our max, then
+             */
+
+            //audit all our groups
+            while(groups.hasNext()){
+                ShardEntryGroup group = groups.next();
+
+                /**
+                 * We have a compaction that may need to be run, don't allocate anything
+                 */
+                if(!group.isCompactionPending()){
+                    /**
+                     * Check if we should allocate, we may want to
+                     */
+                    nodeShardAllocation.auditMaxShard(key.scope, key.id, key.nodeType, key.types  );
+                    continue;
+                }
+
+                /**
+                 * Do the compaction
+                 */
+                if(group.shouldCompact( timeservice.getCurrentTime() )){
+
+                }
+
+            }
+
+
         }
     }
 }
