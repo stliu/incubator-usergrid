@@ -1,12 +1,17 @@
 package org.apache.usergrid.persistence.graph.serialization.impl.shard.impl;
 
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.Iterator;
+import java.util.List;
 
 import org.apache.usergrid.persistence.core.astyanax.ColumnParser;
 import org.apache.usergrid.persistence.core.astyanax.ScopedRowKey;
 import org.apache.usergrid.persistence.core.scope.ApplicationScope;
 import org.apache.usergrid.persistence.graph.Edge;
+import org.apache.usergrid.persistence.graph.serialization.impl.shard.Shard;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.ShardEntryGroup;
 
 import com.google.common.base.Optional;
@@ -23,7 +28,8 @@ import com.netflix.astyanax.util.RangeBuilder;
  * @param <C> The column type
  * @param <T> The parsed return type
  */
-public abstract class EdgeSearcher<R, C, T> implements ColumnParser<C, T>, Iterator<ScopedRowKey<ApplicationScope, R>> {
+public abstract class EdgeSearcher<R, C, T> implements ColumnParser<C, T>, Comparator<T>,
+        Iterator<List<ScopedRowKey<ApplicationScope, R>>> {
 
     protected final Optional<Edge> last;
     protected final long maxTimestamp;
@@ -47,12 +53,21 @@ public abstract class EdgeSearcher<R, C, T> implements ColumnParser<C, T>, Itera
 
 
     @Override
-    public ScopedRowKey<ApplicationScope, R> next() {
-        /**
-         * TODO Shard fix this
-         */
-        return ScopedRowKey
-                .fromKey( scope, generateRowKey( shards.next().getCompactionTarget().getShardIndex() ) );
+    public List<ScopedRowKey<ApplicationScope, R>> next() {
+        Collection<Shard> readShards = shards.next().getReadShards();
+
+        List<ScopedRowKey<ApplicationScope, R>> rowKeys = new ArrayList<>(readShards.size());
+
+        for(Shard shard : shards.next().getReadShards()){
+
+            final ScopedRowKey<ApplicationScope, R> rowKey = ScopedRowKey
+                    .fromKey( scope, generateRowKey(shard.getShardIndex() ) );
+
+            rowKeys.add( rowKey );
+        }
+
+
+        return rowKeys;
     }
 
 

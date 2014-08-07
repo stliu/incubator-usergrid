@@ -44,7 +44,8 @@ public interface NodeShardCache {
                                 final String... edgeType );
 
     /**
-     * Get an iterator of all versions <= the version for iterating shard entry sets
+     * Get an iterator of all versions <= the version for iterating shard entry sets.  The iterator of groups will be ordered
+     * highest to lowest.  I.E range scanning from Long.MAX_VALUE to 0
      * @param scope
      * @param nodeId
      * @para nodeType

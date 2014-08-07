@@ -2,9 +2,11 @@ package org.apache.usergrid.persistence.graph.serialization.impl.shard.impl;
 
 
 import java.util.Iterator;
+import java.util.List;
 import java.util.NoSuchElementException;
 
 import org.apache.usergrid.persistence.core.astyanax.ColumnNameIterator;
+import org.apache.usergrid.persistence.core.astyanax.MultiKeyColumnNameIterator;
 import org.apache.usergrid.persistence.core.astyanax.MultiTennantColumnFamily;
 import org.apache.usergrid.persistence.core.astyanax.ScopedRowKey;
 import org.apache.usergrid.persistence.core.scope.ApplicationScope;
@@ -12,6 +14,7 @@ import org.apache.usergrid.persistence.core.scope.ApplicationScope;
 import com.netflix.astyanax.Keyspace;
 import com.netflix.astyanax.model.ConsistencyLevel;
 import com.netflix.astyanax.query.RowQuery;
+import com.netflix.astyanax.query.RowSliceQuery;
 import com.netflix.astyanax.util.RangeBuilder;
 
 
@@ -99,14 +102,19 @@ public class ShardRowIterator<R, C, T> implements Iterator<T> {
         //set the range into the search
         searcher.setRange( rangeBuilder );
 
-        final ScopedRowKey<ApplicationScope, R> rowKey = searcher.next();
+        /**
+         * Get our list of slices
+         */
+        final List<ScopedRowKey<ApplicationScope, R>> rowKeys = searcher.next();
 
 
-        RowQuery<ScopedRowKey<ApplicationScope, R>, C> query =
-                keyspace.prepareQuery( cf ).setConsistencyLevel( consistencyLevel ).getKey( rowKey )
-                        .autoPaginate( true ).withColumnRange( rangeBuilder.build() );
+        RowSliceQuery<ScopedRowKey<ApplicationScope, R>, C> query =
+                keyspace.prepareQuery( cf ).setConsistencyLevel( consistencyLevel ).getKeySlice( rowKeys )
+                        .withColumnRange( rangeBuilder.build() );
 
 
-        currentColumnIterator = new ColumnNameIterator<C, T>( query, searcher, searcher.hasPage() );
+        currentColumnIterator = new MultiKeyColumnNameIterator<>(query, searcher, searcher, searcher.hasNext() );
+
+
     }
 }

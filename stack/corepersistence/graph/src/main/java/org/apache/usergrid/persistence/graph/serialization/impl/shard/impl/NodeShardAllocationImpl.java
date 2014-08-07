@@ -251,22 +251,4 @@ public class NodeShardAllocationImpl implements NodeShardAllocation {
 
         return timeService.getCurrentTime() - minDelta;
     }
-
-
-    /**
-     * Sorts by minimum time first.  If 2 times are equal, the min shard value is taken
-     */
-    private static final class MinShardTimeComparator implements Comparator<Shard> {
-
-        @Override
-        public int compare( final Shard s1, final Shard s2 ) {
-            int result = Long.compare( s1.getCreatedTime(), s2.getCreatedTime() );
-
-            if ( result == 0 ) {
-                result = Long.compare( s1.getShardIndex(), s2.getShardIndex() );
-            }
-
-            return result;
-        }
-    }
 }
