@@ -15,6 +15,7 @@ import org.apache.usergrid.persistence.graph.serialization.impl.shard.Shard;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.ShardEntryGroup;
 
 import com.google.common.base.Optional;
+import com.google.common.base.Preconditions;
 import com.netflix.astyanax.Serializer;
 import com.netflix.astyanax.model.Column;
 import com.netflix.astyanax.util.RangeBuilder;
@@ -39,6 +40,9 @@ public abstract class EdgeSearcher<R, C, T> implements ColumnParser<C, T>, Compa
 
     protected EdgeSearcher( final ApplicationScope scope, final long maxTimestamp, final Optional<Edge> last,
                             final Iterator<ShardEntryGroup> shards ) {
+
+        Preconditions.checkArgument(shards.hasNext(), "Cannot search with no possible shards");
+
         this.scope = scope;
         this.maxTimestamp = maxTimestamp;
         this.last = last;
@@ -58,7 +62,7 @@ public abstract class EdgeSearcher<R, C, T> implements ColumnParser<C, T>, Compa
 
         List<ScopedRowKey<ApplicationScope, R>> rowKeys = new ArrayList<>(readShards.size());
 
-        for(Shard shard : shards.next().getReadShards()){
+        for(Shard shard : readShards){
 
             final ScopedRowKey<ApplicationScope, R> rowKey = ScopedRowKey
                     .fromKey( scope, generateRowKey(shard.getShardIndex() ) );

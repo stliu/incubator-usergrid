@@ -168,20 +168,20 @@ public class NodeSerializationImpl implements NodeSerialization, Migration {
 
 
     @Override
-    public Map<Id, Long> getMaxVersions( final ApplicationScope scope, final Collection<? extends Edge> nodeIds ) {
+    public Map<Id, Long> getMaxVersions( final ApplicationScope scope, final Collection<? extends Edge> edges ) {
         ValidationUtils.validateApplicationScope( scope );
-        Preconditions.checkNotNull( nodeIds, "nodeIds cannot be null" );
+        Preconditions.checkNotNull( edges, "edges cannot be null" );
 
 
         final ColumnFamilyQuery<ScopedRowKey<ApplicationScope, Id>, Boolean> query = keyspace.prepareQuery( GRAPH_DELETE ).setConsistencyLevel( fig.getReadCL() );
 
 
-        final List<ScopedRowKey<ApplicationScope, Id>> keys = new ArrayList<ScopedRowKey<ApplicationScope, Id>>(nodeIds.size());
+        final List<ScopedRowKey<ApplicationScope, Id>> keys = new ArrayList<ScopedRowKey<ApplicationScope, Id>>(edges.size());
 
         //worst case all are marked
-        final Map<Id, Long> versions = new HashMap<>(nodeIds.size());
+        final Map<Id, Long> versions = new HashMap<>(edges.size());
 
-        for(final Edge edge: nodeIds){
+        for(final Edge edge: edges){
             keys.add( ScopedRowKey.fromKey( scope, edge.getSourceNode() ) );
             keys.add( ScopedRowKey.fromKey( scope, edge.getTargetNode() ) );
         }

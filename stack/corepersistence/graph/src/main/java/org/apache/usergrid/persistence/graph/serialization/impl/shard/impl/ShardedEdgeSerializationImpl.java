@@ -52,6 +52,9 @@ import org.apache.usergrid.persistence.graph.serialization.impl.shard.ShardedEdg
 import org.apache.usergrid.persistence.graph.serialization.util.EdgeUtils;
 import org.apache.usergrid.persistence.model.entity.Id;
 
+import com.fasterxml.uuid.UUIDComparator;
+import com.fasterxml.uuid.impl.UUIDUtil;
+import com.google.common.base.Optional;
 import com.google.inject.Singleton;
 import com.netflix.astyanax.Keyspace;
 import com.netflix.astyanax.MutationBatch;
@@ -346,6 +349,12 @@ public class ShardedEdgeSerializationImpl implements ShardedEdgeSerialization {
                     protected MarkedEdge createEdge( final Long column, final boolean marked ) {
                         return new SimpleMarkedEdge( sourceId, type, targetId, column.longValue(), marked );
                     }
+
+
+                    @Override
+                    public int compare( final MarkedEdge o1, final MarkedEdge o2 ) {
+                        return Long.compare( o1.getTimestamp(), o2.getTimestamp() );
+                    }
                 };
 
         return new ShardRowIterator<>( searcher, columnFamily, keyspace, cassandraConfig.getReadCL(),
@@ -369,8 +378,8 @@ public class ShardedEdgeSerializationImpl implements ShardedEdgeSerialization {
         final Serializer<DirectedEdge> serializer = columnFamily.getColumnSerializer();
 
 
-        final EdgeSearcher<RowKey, DirectedEdge, MarkedEdge> searcher =
-                new EdgeSearcher<RowKey, DirectedEdge, MarkedEdge>( scope, maxTimestamp, edgeType.last(), shards ) {
+        final SourceEdgeSearcher<RowKey, DirectedEdge, MarkedEdge> searcher =
+                new SourceEdgeSearcher<RowKey, DirectedEdge, MarkedEdge>( scope, maxTimestamp, edgeType.last(), shards ) {
 
 
                     @Override
@@ -395,6 +404,8 @@ public class ShardedEdgeSerializationImpl implements ShardedEdgeSerialization {
                     protected MarkedEdge createEdge( final DirectedEdge edge, final boolean marked ) {
                         return new SimpleMarkedEdge( sourceId, type, edge.id, edge.timestamp, marked );
                     }
+
+
                 };
 
 
@@ -421,8 +432,8 @@ public class ShardedEdgeSerializationImpl implements ShardedEdgeSerialization {
         final Serializer<DirectedEdge> serializer = columnFamily.getColumnSerializer();
 
 
-        final EdgeSearcher<RowKeyType, DirectedEdge, MarkedEdge> searcher =
-                new EdgeSearcher<RowKeyType, DirectedEdge, MarkedEdge>( scope, maxTimestamp, edgeType.last(), shards ) {
+        final SourceEdgeSearcher<RowKeyType, DirectedEdge, MarkedEdge> searcher =
+                new SourceEdgeSearcher<RowKeyType, DirectedEdge, MarkedEdge>( scope, maxTimestamp, edgeType.last(), shards ) {
 
                     @Override
                     protected Serializer<DirectedEdge> getSerializer() {
@@ -446,11 +457,16 @@ public class ShardedEdgeSerializationImpl implements ShardedEdgeSerialization {
                     protected MarkedEdge createEdge( final DirectedEdge edge, final boolean marked ) {
                         return new SimpleMarkedEdge( targetId, type, edge.id, edge.timestamp, marked );
                     }
+
+
+
                 };
 
         return new ShardRowIterator( searcher, columnFamily, keyspace, cassandraConfig.getReadCL(),
                 graphFig.getScanPageSize() );
     }
+
+
 
 
     @Override
@@ -467,8 +483,8 @@ public class ShardedEdgeSerializationImpl implements ShardedEdgeSerialization {
                 columnFamilies.getTargetNodeCfName();
         final Serializer<DirectedEdge> serializer = columnFamily.getColumnSerializer();
 
-        final EdgeSearcher<RowKey, DirectedEdge, MarkedEdge> searcher =
-                new EdgeSearcher<RowKey, DirectedEdge, MarkedEdge>( scope, maxTimestamp, edgeType.last(), shards ) {
+        final TargetEdgeSearcher<RowKey, DirectedEdge, MarkedEdge> searcher =
+                new TargetEdgeSearcher<RowKey, DirectedEdge, MarkedEdge>( scope, maxTimestamp, edgeType.last(), shards ) {
 
                     @Override
                     protected Serializer<DirectedEdge> getSerializer() {
@@ -518,8 +534,8 @@ public class ShardedEdgeSerializationImpl implements ShardedEdgeSerialization {
         final Serializer<DirectedEdge> serializer = columnFamily.getColumnSerializer();
 
 
-        final EdgeSearcher<RowKeyType, DirectedEdge, MarkedEdge> searcher =
-                new EdgeSearcher<RowKeyType, DirectedEdge, MarkedEdge>( scope, maxTimestamp, edgeType.last(), shards ) {
+        final TargetEdgeSearcher<RowKeyType, DirectedEdge, MarkedEdge> searcher =
+                new TargetEdgeSearcher<RowKeyType, DirectedEdge, MarkedEdge>( scope, maxTimestamp, edgeType.last(), shards ) {
                     @Override
                     protected Serializer<DirectedEdge> getSerializer() {
                         return serializer;
@@ -548,6 +564,55 @@ public class ShardedEdgeSerializationImpl implements ShardedEdgeSerialization {
                 graphFig.getScanPageSize() );
     }
 
+
+    /**
+     * Class for performing searched on rows based on source id
+     */
+    private static abstract class SourceEdgeSearcher<R, C, T extends Edge> extends EdgeSearcher<R, C, T>{
+
+        protected SourceEdgeSearcher( final ApplicationScope scope, final long maxTimestamp, final Optional<Edge> last,
+                                      final Iterator<ShardEntryGroup> shards ) {
+            super( scope, maxTimestamp, last, shards );
+        }
+
+
+        public int compare( final T o1, final T o2 ) {
+            int compare = Long.compare(o1.getTimestamp(), o2.getTimestamp());
+
+            if(compare == 0){
+                compare = o1.getTargetNode().compareTo( o2.getTargetNode());
+            }
+
+            return compare;
+        }
+
+
+    }
+
+
+    /**
+     * Class for performing searched on rows based on target id
+     */
+    private static abstract class TargetEdgeSearcher<R, C, T extends Edge> extends EdgeSearcher<R, C, T>{
+
+        protected TargetEdgeSearcher( final ApplicationScope scope, final long maxTimestamp, final Optional<Edge> last,
+                                      final Iterator<ShardEntryGroup> shards ) {
+            super( scope, maxTimestamp, last, shards );
+        }
+
+
+        public int compare( final T o1, final T o2 ) {
+            int compare = Long.compare(o1.getTimestamp(), o2.getTimestamp());
+
+            if(compare == 0){
+                compare = o1.getTargetNode().compareTo( o2.getTargetNode());
+            }
+
+            return compare;
+        }
+
+
+    }
 
     /**
      * Simple callback to perform puts and deletes with a common row setup code

@@ -25,42 +25,58 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
-import java.util.Observable;
-import java.util.TreeMap;
-import java.util.TreeSet;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Exchanger;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.Semaphore;
 
-import com.netflix.astyanax.connectionpool.exceptions.ConnectionException;
-import com.netflix.astyanax.model.Column;
-import com.netflix.astyanax.model.Row;
-import com.netflix.astyanax.query.RowQuery;
-import com.netflix.astyanax.query.RowSliceQuery;
-import com.netflix.hystrix.HystrixCommandGroupKey;
+import org.apache.usergrid.persistence.core.rx.OrderedMerge;
+
+import com.amazonaws.services.redshift.model.UnsupportedOptionException;
+import com.google.common.base.Preconditions;
+
+import rx.Observable;
+import rx.Subscriber;
+import rx.schedulers.Schedulers;
 
 
 /**
- * Simple iterator that wraps a collection of ColumnNameIterators.  We do this because we can't page with a multiRangeScan
- * correctly for multiple trips.  As a result, we do this since only 1 iterator with minimum values could potentially
- * feed the entire result set.
+ * Simple iterator that wraps a collection of ColumnNameIterators.  We do this because we can't page with a
+ * multiRangeScan correctly for multiple round trips.  As a result, we do this since only 1 iterator with minimum values
+ * could potentially feed the entire result set.
  *
- * Compares the parsed values and puts them in order. If more than one row key emits the same value
- * the first value is selected, and ignored from subsequent iterators.
- *
+ * Compares the parsed values and puts them in order. If more than one row key emits the same value the first value is
+ * selected, and ignored from subsequent iterators.
  */
 public class MultiKeyColumnNameIterator<C, T> implements Iterable<T>, Iterator<T> {
 
 
-    private static final HystrixCommandGroupKey GROUP_KEY = HystrixCommandGroupKey.Factory.asKey( "CassRead" );
+    private InnerIterator<T> iterator;
 
 
-   private final Comparator<T> comparator;
+    public MultiKeyColumnNameIterator( final Collection<ColumnNameIterator<C, T>> columnNameIterators,
+                                       final Comparator<T> comparator, final int bufferSize ) {
 
 
-    public MultiKeyColumnNameIterator(Collection<ColumnNameIterator<C, T>> columnNameIterators, final Comparator<T> comparator) {
+        Observable<T>[] observables = new Observable[columnNameIterators.size()];
 
-        this.comparator = comparator;
+        int i = 0;
+
+        for ( ColumnNameIterator<C, T> columnNameIterator : columnNameIterators ) {
+
+            observables[i] = Observable.from( columnNameIterator, Schedulers.io() );
+
+            i++;
+        }
 
 
-        advanceIterator();
+        //merge them into 1 observable, and remove duplicates from the stream
+        Observable<T> merged = OrderedMerge.orderedMerge( comparator, bufferSize, observables ).distinctUntilChanged();
+
+
+        iterator = new InnerIterator( bufferSize );
+
+        merged.subscribe( iterator );
     }
 
 
@@ -72,81 +88,118 @@ public class MultiKeyColumnNameIterator<C, T> implements Iterable<T>, Iterator<T
 
     @Override
     public boolean hasNext() {
-        //if we've exhausted this iterator, try to advance to the next set
-        if ( sourceIterator.hasNext() ) {
-            return true;
-        }
-
-        //advance the iterator, to the next page, there could be more
-        advanceIterator();
-
-        return sourceIterator.hasNext();
+        return iterator.hasNext();
     }
 
 
     @Override
     public T next() {
-
-        if ( !hasNext() ) {
-            throw new NoSuchElementException();
-        }
-
-        return parser.parseColumn( sourceIterator.next() );
+        return iterator.next();
     }
 
 
     @Override
     public void remove() {
-        sourceIterator.remove();
+        throw new UnsupportedOperationException( "You cannot remove elements from a merged iterator, it is read only" );
     }
 
 
     /**
-     * Execute the query again and set the reuslts
+     * Internal iterator that will put next elements into a blocking queue until it reaches capacity. At this point it
+     * will block then emitting thread until more elements are taken.  Assumed the Observable is run on a I/O thread,
+     * NOT the current thread.
      */
-    private void advanceIterator() {
+    private final class InnerIterator<T> extends Subscriber<T> implements Iterator<T> {
 
-        //run producing the values within a hystrix command.  This way we'll time out if the read takes too long
-        try {
-            sourceIterator = rowQuery.execute().getResult().iterator();
+
+        //        private final Semaphore runSemaphore;
+        private final LinkedBlockingQueue<T> queue;
+
+        private final CountDownLatch startLatch = new CountDownLatch( 1 );
+
+
+        private Throwable error;
+        private boolean done = false;
+
+
+        private InnerIterator( int bufferSize ) {
+            //            runSemaphore = new Semaphore( 0 );
+            queue = new LinkedBlockingQueue<>( bufferSize );
         }
-        catch ( ConnectionException e ) {
-            throw new RuntimeException( "Unable to get next page", e );
+
+
+        @Override
+        public boolean hasNext() {
+
+
+            try {
+                startLatch.await();
+            }
+            catch ( InterruptedException e ) {
+                throw new RuntimeException( "Exception thrown waiting for subscription to start", e );
+            }
+
+
+            //we only return false when we're done and the queue is empty
+            return !done || !queue.isEmpty();
+        }
+
+
+        @Override
+        public T next() {
+            if ( error != null ) {
+                throw new RuntimeException( "An error occurred when populating the iterator", error );
+            }
+
+            if ( !hasNext() ) {
+                throw new NoSuchElementException( "No more elements are present" );
+            }
+
+
+
+            try {
+                return  queue.take();
+            }
+            catch ( InterruptedException e ) {
+                throw new RuntimeException( "Unable to take from queue" );
+            }
+
+
+        }
+
+
+        @Override
+        public void remove() {
+            throw new UnsupportedOptionException( "Remove is unsupported" );
+        }
+
+
+        @Override
+        public void onCompleted() {
+            done = true;
+            startLatch.countDown();
+        }
+
+
+        @Override
+        public void onError( final Throwable e ) {
+            error = e;
+            startLatch.countDown();
+        }
+
+
+        @Override
+        public void onNext( final T t ) {
+            Preconditions.checkArgument(t != null, "t cannot be null");
+
+            //offer the value, but block if we can't add the capacity
+            try {
+                queue.put( t );
+            }
+            catch ( InterruptedException e ) {
+                throw new RuntimeException( "Unable to to put into queue", e );
+            }
+            startLatch.countDown();
         }
     }
-
-
-    private final class MultiColumIteratorSet{
-
-        private TreeMap<T, ColumnNameIterator<C, T>> sources;
-
-
-
-
-        public boolean isInitialized(){
-            return sources != null;
-        }
-
-
-
-        public boolean hasNext(){
-            return sources == null && sources.size() > 0;
-        }
-
-
-        public void initialize(Collection<ColumnNameIterator<C, T>> columnNameIterators){
-
-
-
-            for (ColumnNameIterator)
-
-        }
-
-
-
-
-    }
-
-
-
 }
