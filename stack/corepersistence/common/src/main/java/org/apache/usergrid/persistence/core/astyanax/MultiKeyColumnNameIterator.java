@@ -24,11 +24,14 @@ package org.apache.usergrid.persistence.core.astyanax;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.NoSuchElementException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Exchanger;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.usergrid.persistence.core.rx.OrderedMerge;
 
@@ -74,7 +77,7 @@ public class MultiKeyColumnNameIterator<C, T> implements Iterable<T>, Iterator<T
         Observable<T> merged = OrderedMerge.orderedMerge( comparator, bufferSize, observables ).distinctUntilChanged();
 
 
-        iterator = new InnerIterator( bufferSize );
+        iterator = new InnerIterator(bufferSize);
 
         merged.subscribe( iterator );
     }
@@ -111,20 +114,19 @@ public class MultiKeyColumnNameIterator<C, T> implements Iterable<T>, Iterator<T
      */
     private final class InnerIterator<T> extends Subscriber<T> implements Iterator<T> {
 
+        private CountDownLatch startLatch = new CountDownLatch( 1 );
 
-        //        private final Semaphore runSemaphore;
         private final LinkedBlockingQueue<T> queue;
-
-        private final CountDownLatch startLatch = new CountDownLatch( 1 );
 
 
         private Throwable error;
         private boolean done = false;
 
+        private T next;
 
-        private InnerIterator( int bufferSize ) {
-            //            runSemaphore = new Semaphore( 0 );
-            queue = new LinkedBlockingQueue<>( bufferSize );
+
+        private InnerIterator( int maxSize ) {
+            queue = new LinkedBlockingQueue<>( maxSize );
         }
 
 
@@ -132,21 +134,36 @@ public class MultiKeyColumnNameIterator<C, T> implements Iterable<T>, Iterator<T
         public boolean hasNext() {
 
 
+            //we're done
+            if ( next != null ) {
+                return true;
+            }
+
+
             try {
                 startLatch.await();
             }
             catch ( InterruptedException e ) {
-                throw new RuntimeException( "Exception thrown waiting for subscription to start", e );
+                throw new RuntimeException( "Unable to wait for start of submission" );
             }
 
 
-            //we only return false when we're done and the queue is empty
-            return !done || !queue.isEmpty();
+
+            //this is almost a busy wait, and is intentional, if we have nothing to poll, we want to get it as soon
+            //as it's available.  We generally only hit this once
+            do {
+                next = queue.poll();
+            }
+            while ( next == null && !done );
+
+
+            return next != null;
         }
 
 
         @Override
         public T next() {
+
             if ( error != null ) {
                 throw new RuntimeException( "An error occurred when populating the iterator", error );
             }
@@ -156,15 +173,9 @@ public class MultiKeyColumnNameIterator<C, T> implements Iterable<T>, Iterator<T
             }
 
 
-
-            try {
-                return  queue.take();
-            }
-            catch ( InterruptedException e ) {
-                throw new RuntimeException( "Unable to take from queue" );
-            }
-
-
+            T toReturn = next;
+            next = null;
+            return toReturn;
         }
 
 
@@ -184,21 +195,22 @@ public class MultiKeyColumnNameIterator<C, T> implements Iterable<T>, Iterator<T
         @Override
         public void onError( final Throwable e ) {
             error = e;
+            done = true;
             startLatch.countDown();
         }
 
 
         @Override
         public void onNext( final T t ) {
-            Preconditions.checkArgument(t != null, "t cannot be null");
 
-            //offer the value, but block if we can't add the capacity
+            //may block if we get full, that's expected behavior
             try {
                 queue.put( t );
             }
             catch ( InterruptedException e ) {
-                throw new RuntimeException( "Unable to to put into queue", e );
+                throw new RuntimeException( "Unable to take from queue" );
             }
+
             startLatch.countDown();
         }
     }

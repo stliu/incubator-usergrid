@@ -9,6 +9,8 @@ import org.apache.commons.collections4.iterators.PushbackIterator;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.Shard;
 import org.apache.usergrid.persistence.graph.serialization.impl.shard.ShardEntryGroup;
 
+import com.google.common.base.Preconditions;
+
 
 /**
  * Utility class that will take an iterator of all shards, and combine them into an iterator
@@ -28,6 +30,7 @@ public class ShardEntryGroupIterator implements Iterator<ShardEntryGroup> {
      * @param minDelta The minimum delta we allow to consider shards the same group
      */
     public ShardEntryGroupIterator( final Iterator<Shard> shardIterator, final long minDelta ) {
+        Preconditions.checkArgument(shardIterator.hasNext(), "Shard iterator must have shards present");
         this.sourceIterator = new PushbackIterator( shardIterator );
         this.minDelta = minDelta;
     }

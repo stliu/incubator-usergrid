@@ -294,16 +294,6 @@ public class NodeShardCacheImpl implements NodeShardCache {
         }
 
 
-//        private static class ShardEntriesComparator implements Comparator<Long> {
-//
-//            private static final ShardEntriesComparator INSTANCE = new ShardEntriesComparator();
-//
-//
-//            @Override
-//            public int compare( final Long o1, final Long o2 ) {
-//                return Long.compare( o1, o2 ) * -1;
-//            }
-//        }
     }
 
 

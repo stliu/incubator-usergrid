@@ -39,41 +39,13 @@ import static org.junit.Assert.assertNotNull;
 
 public class ShardEntryGroupIteratorTest {
 
-    @Test
+    @Test(expected = IllegalArgumentException.class)
     public void noShards(){
-
-        final Shard minShard = new Shard(0, 0, true);
         final long delta = 10000;
         final Iterator<Shard> noShards = Collections.<Shard>emptyList().iterator();
 
-        ShardEntryGroupIterator entryGroupIterator = new ShardEntryGroupIterator(noShards, delta);
-
-        assertTrue("Root shard always present", entryGroupIterator.hasNext());
-
-        ShardEntryGroup group = entryGroupIterator.next();
-
-        assertNotNull("Group returned", group);
-
-        Collection<Shard> readShards = group.getReadShards();
-
-        assertEquals("Min shard present", 1, readShards.size());
-
-        assertTrue("Min shard present", readShards.contains( minShard ));
-
-
-        Collection<Shard> writeShards = group.getWriteShards( 0 );
-
-        assertEquals("Min shard present", 1, writeShards.size());
-
-        assertTrue("Min shard present", writeShards.contains( minShard ));
-
-
-        writeShards = group.getWriteShards( Long.MAX_VALUE );
-
-        assertEquals("Min shard present", 1, writeShards.size());
-
-        assertTrue("Min shard present", writeShards.contains( minShard ));
-
+        //should blow up, our iterator is empty
+        new ShardEntryGroupIterator(noShards, delta);
 
     }
 

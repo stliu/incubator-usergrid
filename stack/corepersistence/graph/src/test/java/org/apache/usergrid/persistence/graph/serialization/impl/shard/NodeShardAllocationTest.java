@@ -28,6 +28,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
+import org.apache.cassandra.thrift.Mutation;
+
 import org.apache.usergrid.persistence.core.consistency.TimeService;
 import org.apache.usergrid.persistence.core.scope.ApplicationScope;
 import org.apache.usergrid.persistence.graph.GraphFig;
@@ -42,6 +44,7 @@ import org.apache.usergrid.persistence.model.util.UUIDGenerator;
 import com.google.common.base.Optional;
 import com.netflix.astyanax.Keyspace;
 import com.netflix.astyanax.MutationBatch;
+import com.netflix.astyanax.connectionpool.exceptions.ConnectionException;
 
 import static junit.framework.TestCase.assertTrue;
 import static org.apache.usergrid.persistence.graph.test.util.EdgeTestUtils.createId;
@@ -495,7 +498,7 @@ public class NodeShardAllocationTest {
 
 
     @Test
-    public void noShardsReturns() {
+    public void noShardsReturns() throws ConnectionException {
         final EdgeShardSerialization edgeShardSerialization = mock( EdgeShardSerialization.class );
 
         final EdgeColumnFamilies edgeColumnFamilies = mock( EdgeColumnFamilies.class );
@@ -527,11 +530,19 @@ public class NodeShardAllocationTest {
          * Mock up returning an empty iterator, our audit shouldn't create a new shard
          */
         when( edgeShardSerialization
-                .getShardMetaData( same( scope ), same( nodeId ), eq( NodeType.TARGET ), any( Optional.class ),
+                .getShardMetaData( same( scope ), same( nodeId ), same( NodeType.TARGET ), any( Optional.class ),
                         same( type ), same( subType ) ) ).thenReturn( Collections.<Shard>emptyList().iterator() );
+
+
+
+        ArgumentCaptor<Shard> shardArgumentCaptor = ArgumentCaptor.forClass( Shard.class );
+
+        when(edgeShardSerialization.writeShardMeta( same(scope), same(nodeId), same(NodeType.TARGET), shardArgumentCaptor.capture() , same(type), same(subType) )).thenReturn( batch );
+
 
         final Iterator<ShardEntryGroup> result =
                 approximation.getShards( scope, nodeId, NodeType.TARGET, Optional.<Shard>absent(), type, subType );
+
 
 
         ShardEntryGroup shardEntryGroup = result.next();
@@ -539,6 +550,11 @@ public class NodeShardAllocationTest {
         final Shard rootShard = new Shard( 0, 0, true );
 
         assertEquals("Shard size expected", 1, shardEntryGroup.entrySize());
+
+
+        //ensure we persisted the new shard.
+        assertEquals("Root shard was persisted", rootShard, shardArgumentCaptor.getValue());
+
 
         //now verify all 4 are in this group.  This is because the first shard (0,0) (n-1_ may be the only shard other
         //nodes see while we're rolling our state.  This means it should be read and merged from as well
