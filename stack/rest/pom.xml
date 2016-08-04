@@ -25,7 +25,6 @@
     </parent>
 
     <artifactId>usergrid-rest</artifactId>
-    <packaging>war</packaging>
     <name>Usergrid REST</name>
     <description>REST web services for Usergrid system.</description>
 
@@ -37,7 +36,6 @@
     </properties>
 
     <build>
-        <finalName>ROOT</finalName>
 
         <resources>
             <resource>
@@ -114,66 +112,7 @@
             </plugin>
 
 
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-war-plugin</artifactId>
-                <version>2.6</version>
-            </plugin>
 
-            <!-- TODO: do we need this?
-            <plugin>
-                <groupId>org.jasig.mojo.jspc</groupId>
-                <artifactId>jspc-maven-plugin</artifactId>
-                <version>2.0.0</version>
-                <configuration>
-                    <includeInProject>false</includeInProject>
-                    <webFragmentFile>${project.build.directory}/web-fragment.xml.txt</webFragmentFile>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>jspc</id>
-                        <goals>
-                            <goal>compile</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin> -->
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-jar-plugin</artifactId>
-                <configuration>
-                    <finalName>${project.artifactId}-${project.version}</finalName>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>make-a-jar</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                        <configuration>
-                            <classifier>classes</classifier>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>jsp-jar-execution</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                        <configuration>
-                            <classifier>compiled-jsp</classifier>
-                            <classesDirectory>${project.build.directory}/jsp-source</classesDirectory>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <goals>
-                            <goal>test-jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
     </build>
 
@@ -199,11 +138,6 @@
             </exclusions>
         </dependency>
 
-        <!-- <dependency>
-            <groupId>org.apache.usergrid</groupId>
-            <artifactId>usergrid-mongo-emulator</artifactId>
-            <version>${project.version}</version>
-        </dependency> -->
 
         <!-- Apache Dependencies -->
 

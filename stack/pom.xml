@@ -188,7 +188,6 @@
     </developers>
 
     <modules>
-        <module>build-tools</module>
         <module>test-utils</module>
         <module>config</module>
         <module>corepersistence</module>
@@ -1490,21 +1489,6 @@
                 </executions>
             </plugin>
 
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-checkstyle-plugin</artifactId>
-                <version>2.10</version>
-                <configuration>
-                    <configLocation>usergrid/checkstyle.xml</configLocation>
-                </configuration>
-                <dependencies>
-                    <dependency>
-                        <groupId>${project.groupId}</groupId>
-                        <artifactId>build-tools</artifactId>
-                        <version>${project.version}</version>
-                    </dependency>
-                </dependencies>
-            </plugin>
 
         </plugins>
     </build>
